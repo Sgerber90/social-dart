@@ -88,7 +88,7 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
       if (r.finished || res.bust || res.endTurn || t.darts.length >= 3) close(t)
     } else if (a.t === 'total') {
       if (open || !engine.total) continue
-      const probe = structuredClone(s)
+      const probe = JSON.parse(JSON.stringify(s)) as typeof s
       if (engine.total(probe, side, a.n, cfg) === null) continue
       const t = begin()
       const res = engine.total(s, side, a.n, cfg)!

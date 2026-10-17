@@ -51,6 +51,13 @@ scripts/          # icon generation (renders the in-app board to PWA icons)
 
 The game is **event-sourced**: a game is just its `GameConfig` plus a list of `Action`s (`dart`, `total`, `end`). Every view is `replay(config, actions)`, so undo is "drop the last action", persistence is one JSON blob, and the same log could later be synced to other devices or a server.
 
+## Reliability
+
+- **Saved data is versioned and validated** (`src/game/validate.ts`, `src/storage.ts`): data is stored as `{ v, data }`, and saves are replayed before use. Anything invalid or from an unknown version is discarded, so it can't crash the app. Saves from v1 are migrated.
+- **An error boundary** shows *Reload* / *Reset app* (Reset clears Social Dart's saved data, the service worker and its caches).
+- **Service worker:** `skipWaiting` + `clientsClaim` let a new version take over immediately, and navigations (index.html) are network-first so a new deploy is picked up right away. Hashed assets are precached for offline use.
+- **Boot guard (inline in `index.html`):** a splash shows while loading. If a hashed asset 404s or the app hasn't mounted after 8 s, it clears the offline cache and reloads once, then offers *Reset app*.
+
 ## Deploy
 
 Vercel picks up `vercel.json` (Vite preset, `dist/`). Or click

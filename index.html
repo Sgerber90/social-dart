@@ -11,10 +11,62 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="description" content="Social Dart: fast, mobile-first darts scorer — no sign-ups: 501, 301, Killer, 1 to 7, Cricket and Around the Clock." />
     <meta name="apple-mobile-web-app-title" content="Social Dart" />
+    <style>
+      html,body{margin:0;background:#0c0b0a;color:#efe2bf;font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
+      #sd-splash{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;box-sizing:border-box}
+      #sd-splash img{width:88px;height:88px}
+      #sd-splash .t{font-size:24px;font-weight:900;color:#d4a640}
+      #sd-splash .m{font-size:14px;opacity:.65;max-width:300px}
+      #sd-splash button{display:none;min-height:52px;padding:0 24px;border:0;border-radius:16px;background:#d4a640;color:#000;font-weight:800;font-size:16px}
+    </style>
+    <script>
+      /* Boot guard: if the app bundle fails to load (stale cache / 404 / unsupported browser),
+         clear the offline cache and reload once; after that, offer a manual reset. */
+      (function () {
+        var FLAG = 'social-dart:boot-retry';
+        function clearCaches() {
+          var p = [];
+          try { if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) p.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); } catch (e) {}
+          try { if (window.caches) p.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
+          return Promise.all(p).catch(function () {});
+        }
+        function retried() { try { return Date.now() - Number(sessionStorage.getItem(FLAG) || 0) < 60000; } catch (e) { return true; } }
+        function showReset() {
+          var b = document.getElementById('sd-reset'), m = document.getElementById('sd-msg');
+          if (m) m.textContent = 'Social Dart could not start. Reset clears saved games on this device and loads the latest version.';
+          if (b) b.style.display = 'inline-block';
+        }
+        window.__sdRecover = function () {
+          if (window.__sdBooted) return;
+          if (!retried()) {
+            try { sessionStorage.setItem(FLAG, String(Date.now())); } catch (e) {}
+            clearCaches().then(function () { location.reload(); });
+          } else showReset();
+        };
+        window.__sdReset = function () {
+          try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf('social-dart:') === 0 || k.indexOf('darts-scorer:') === 0) localStorage.removeItem(k); }); } catch (e) {}
+          clearCaches().then(function () { location.replace(location.pathname); });
+        };
+        // A hashed script/stylesheet failed to load (e.g. 404 after a deploy).
+        window.addEventListener('error', function (e) {
+          var t = e && e.target;
+          if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK') && /\/assets\//.test(t.src || t.href || '')) window.__sdRecover();
+        }, true);
+        // Nothing mounted after 8s: recover.
+        setTimeout(function () { if (!window.__sdBooted) window.__sdRecover(); }, 8000);
+      })();
+    </script>
     <title>Social Dart · Darts Scorer</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="sd-splash">
+        <img src="./favicon.svg" alt="" />
+        <div class="t">Social Dart</div>
+        <div class="m" id="sd-msg">Loading…</div>
+        <button id="sd-reset" type="button" onclick="window.__sdReset()">Reset app</button>
+      </div>
+    </div>
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>

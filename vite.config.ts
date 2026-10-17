@@ -12,6 +12,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // registered from src/main.tsx
       includeAssets: ['favicon.svg', 'board.svg', 'icons/apple-touch-icon.png'],
       manifest: {
         name: 'Social Dart',
@@ -31,7 +32,26 @@ export default defineConfig({
           { src: 'icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'] },
+      workbox: {
+        // index.html is NOT precached: navigations go network-first so a new deploy is
+        // picked up immediately, falling back to the last cached copy when offline.
+        globPatterns: ['**/*.{js,css,svg,png,webmanifest}'],
+        navigateFallback: null,
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'social-dart-pages',
+              networkTimeoutSeconds: 4,
+              expiration: { maxEntries: 5 },
+            },
+          },
+        ],
+      },
     }),
   ],
   test: { environment: 'node', include: ['src/**/*.test.ts'] },
