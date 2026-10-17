@@ -70,9 +70,20 @@ interface Props {
   art?: boolean
   /** Extra highlight per-region, used for picker art. */
   emphasize?: (d: Dart) => boolean
+  /** Label shown in the hit pop-up. */
+  labelFor?: (d: Dart) => string
 }
 
-export default function Dartboard({ onDart, highlight, disabled, numbers = true, className, art, emphasize }: Props) {
+export default function Dartboard({
+  onDart,
+  highlight,
+  disabled,
+  numbers = true,
+  className,
+  art,
+  emphasize,
+  labelFor = dartLabel,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [hits, setHits] = useState<Hit[]>([])
   const idRef = useRef(0)
@@ -91,7 +102,7 @@ export default function Dartboard({ onDart, highlight, disabled, numbers = true,
     }
     const id = ++idRef.current
     const tone = dart.segment === 0 ? 'miss' : dart.mult === 3 ? 'triple' : dart.mult === 2 ? 'double' : 'single'
-    setHits((h) => [...h.slice(-4), { id, x, y, label: dartLabel(dart), key, tone }])
+    setHits((h) => [...h.slice(-4), { id, x, y, label: labelFor(dart), key, tone }])
     svg?.animate(
       [{ transform: 'scale(1)' }, { transform: `scale(${dart.segment === 0 ? 0.99 : 0.975})` }, { transform: 'scale(1)' }],
       { duration: 160, easing: 'ease-out' },

@@ -76,7 +76,7 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
     if (finished) break
     if (a.t === 'dart') {
       const t: TurnRecord = open ?? begin()
-      const res = engine.dart(s, side, a.dart, cfg)
+      const res = engine.dart(s, side, a.dart, cfg, a.to)
       t.darts.push(a.dart)
       t.points += res.points ?? 0
       addNote(t, res.note)

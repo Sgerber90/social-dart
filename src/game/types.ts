@@ -6,6 +6,9 @@ export interface Dart {
   mult: Multiplier
 }
 
+/** 'number' = marks on the segment's own number, 'ring' = 1 mark on Doubles / Triples. */
+export type DartChoice = 'number' | 'ring'
+
 export type GameType = 'x01' | 'killer' | 'oneToSeven' | 'cricket' | 'closeOut' | 'atc'
 
 export interface Player {
@@ -35,7 +38,8 @@ export interface GameConfig {
 }
 
 export type Action =
-  | { t: 'dart'; dart: Dart }
+  /** `to` = where the thrower chose to count it, for games with a choice (Close Out). */
+  | { t: 'dart'; dart: Dart; to?: DartChoice }
   | { t: 'total'; n: number }
   | { t: 'end' }
 

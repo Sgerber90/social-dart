@@ -1,9 +1,19 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { applyAction, replay, undo } from '../game/engine'
 import { suggestCheckout, isCheckoutPossible } from '../game/checkout'
-import { CLOSE_OUT_MARKS, CLOSE_OUT_TARGETS, CRICKET_TARGETS, closeOutClosed, ONE_TO_SEVEN_ROUNDS, x01Average } from '../game/engines'
-import { gameTitle, playerName, sideLabel } from '../game/meta'
-import { dartLabel, type Action, type Dart, type GameConfig } from '../game/types'
+import {
+  CLOSE_OUT_MARKS,
+  CLOSE_OUT_TARGETS,
+  CRICKET_TARGETS,
+  closeOutClosed,
+  closeOutOpenOptions,
+  closeOutTargetName,
+  type CloseOutOption,
+  ONE_TO_SEVEN_ROUNDS,
+  x01Average,
+} from '../game/engines'
+import { dartLabelFor, gameTitle, playerName, sideLabel } from '../game/meta'
+import { dartLabel, type Action, type Dart, type DartChoice, type GameConfig } from '../game/types'
 import DartPad from './DartPad'
 import Dartboard from './Dartboard'
 import { haptic } from '../platform/haptics'
@@ -46,7 +56,28 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
     else if (a.t === 'dart' && a.dart.mult > 1) haptic('medium')
     else haptic('light')
   }
-  const onDart = (d: Dart) => dispatch({ t: 'dart', dart: d })
+  const [pending, setPending] = useState<{ dart: Dart; options: CloseOutOption[] } | null>(null)
+  const label = (d: Dart) => dartLabelFor(cfg.type, d)
+  const onDart = (d: Dart) => {
+    if (pending) return
+    if (s.kind === 'closeOut') {
+      // A dart counts once. If it could go to two open targets, ask; otherwise apply the only open one.
+      const options = closeOutOpenOptions(s, view.side, d)
+      if (options.length > 1) {
+        haptic('light')
+        setPending({ dart: d, options })
+        return
+      }
+      return dispatch({ t: 'dart', dart: d, to: options[0]?.to })
+    }
+    dispatch({ t: 'dart', dart: d })
+  }
+  const choose = (to: DartChoice) => {
+    if (!pending) return
+    const d = pending.dart
+    setPending(null)
+    dispatch({ t: 'dart', dart: d, to })
+  }
 
   const side = cfg.sides[view.side]
   const thrower = playerName(cfg, view.playerId)
@@ -57,7 +88,6 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
   if (effectiveMode === 'total' && view.turnOpen) effectiveMode = 'board'
   const lastTurn = view.turns[view.turns.length - 1]
   const bustFlash = lastTurn?.bust && lastTurn.complete && !view.turnOpen
-
 
   let hint: string | null = null
   let highlight: ((n: number) => boolean) | undefined
@@ -81,15 +111,13 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
     const open = CLOSE_OUT_TARGETS.filter((_, ti) => mine[ti] < CLOSE_OUT_MARKS).map((t) =>
       t === 25 ? 'B' : String(t),
     )
-    hint = open.length ? `Open: ${open.join(' ')}` : null
+    hint = open.length ? `${open.length} to close${open.includes('B') ? ' · Cherry = 2' : ''}` : null
     // Numbers 15-20 and bull are targets; every double/triple ring counts too.
     highlight = (n) => n >= 15
     regionHighlight = (d) => d.segment >= 15 || d.mult > 1
   } else if (s.kind === 'killer') {
     const me = view.side
-    hint = s.killer[me]
-      ? 'You are a Killer — hit opponents’ doubles'
-      : `Hit double ${s.numbers[me]} to become a Killer`
+    hint = s.killer[me] ? 'You are a Killer — hit opponents’ doubles' : `Hit double ${s.numbers[me]} to become a Killer`
     const live = s.numbers.filter((_, i) => s.lives[i] > 0)
     highlight = (n) => (s.killer[me] ? live.includes(n) : n === s.numbers[me])
   }
@@ -110,7 +138,10 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
         <Scoreboard cfg={cfg} view={view} />
       </div>
       {bustFlash && (
-        <div key={`bm${view.turns.length}`} className="anim-pop pointer-events-none -my-1 text-center text-sm font-black uppercase tracking-[0.3em] text-dred">
+        <div
+          key={`bm${view.turns.length}`}
+          className="anim-pop pointer-events-none -my-1 text-center text-sm font-black uppercase tracking-[0.3em] text-dred"
+        >
           Bust!
         </div>
       )}
@@ -128,25 +159,44 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
             {hint ?? `${dartsLeft} dart${dartsLeft === 1 ? '' : 's'} left`}
           </div>
         </div>
-        <TurnDarts darts={view.openDarts} />
+        <TurnDarts darts={view.openDarts} label={label} />
       </div>
 
       <div className="mt-auto flex flex-1 flex-col justify-end gap-2">
-        <div className={cx('grid gap-1 rounded-2xl bg-white/5 p-1 ring-1 ring-white/10', modes.length === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
-          {modes.map((m) => (
-            <button
-              key={m}
-              type="button"
-              disabled={view.turnOpen && m === 'total'}
-              onClick={() => setMode(m)}
-              className={cx(
-                'min-h-10 rounded-xl text-sm font-semibold transition disabled:opacity-30',
-                effectiveMode === m ? 'bg-cream text-black' : 'text-cream/60',
-              )}
-            >
-              {MODE_LABEL[m]}
-            </button>
-          ))}
+        <div className="relative">
+          {pending && s.kind === 'closeOut' && (
+            <div className="absolute inset-x-0 top-0 z-20">
+              <ChoicePrompt
+                dart={pending.dart}
+                options={pending.options}
+                marks={s.marks[view.side]}
+                label={label}
+                onChoose={choose}
+                onCancel={() => setPending(null)}
+              />
+            </div>
+          )}
+          <div
+            className={cx(
+              'grid gap-1 rounded-2xl bg-white/5 p-1 ring-1 ring-white/10',
+              modes.length === 3 ? 'grid-cols-3' : 'grid-cols-2',
+            )}
+          >
+            {modes.map((m) => (
+              <button
+                key={m}
+                type="button"
+                disabled={view.turnOpen && m === 'total'}
+                onClick={() => setMode(m)}
+                className={cx(
+                  'min-h-10 rounded-xl text-sm font-semibold transition disabled:opacity-30',
+                  effectiveMode === m ? 'bg-cream text-black' : 'text-cream/60',
+                )}
+              >
+                {MODE_LABEL[m]}
+              </button>
+            ))}
+          </div>
         </div>
 
         {s.kind === 'x01' && effectiveMode === 'total' ? (
@@ -158,25 +208,44 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
           />
         ) : effectiveMode === 'board' ? (
           <FitSquare>
-            <Dartboard onDart={onDart} highlight={highlight} emphasize={regionHighlight} disabled={view.finished} />
+            <Dartboard
+              onDart={onDart}
+              highlight={highlight}
+              emphasize={regionHighlight}
+              disabled={view.finished || !!pending}
+              labelFor={label}
+            />
           </FitSquare>
         ) : (
-          <DartPad onDart={onDart} highlight={highlight} disabled={view.finished} />
+          <DartPad
+            onDart={onDart}
+            highlight={highlight}
+            disabled={view.finished || !!pending}
+            bullLabel={cfg.type === 'closeOut' ? 'Cherry' : undefined}
+          />
         )}
 
         <div className={cx('grid gap-2', effectiveMode === 'board' ? 'grid-cols-3' : 'grid-cols-2')}>
-          <Button className="min-h-14" disabled={actions.length === 0} onClick={() => setActions(undo(actions))}>
+          <Button
+            className="min-h-14"
+            disabled={actions.length === 0 && !pending}
+            onClick={() => (pending ? setPending(null) : setActions(undo(actions)))}
+          >
             ↶ Undo
           </Button>
           {effectiveMode === 'board' && (
-            <Button className="min-h-14" onClick={() => onDart({ segment: 0, mult: 1 })} disabled={view.finished}>
+            <Button
+              className="min-h-14"
+              onClick={() => onDart({ segment: 0, mult: 1 })}
+              disabled={view.finished || !!pending}
+            >
               Miss
             </Button>
           )}
           <Button
             className="min-h-14"
             variant="soft"
-            disabled={view.finished || (effectiveMode === 'total' && !view.turnOpen)}
+            disabled={view.finished || !!pending || (effectiveMode === 'total' && !view.turnOpen)}
             onClick={() => dispatch({ t: 'end' })}
           >
             {view.turnOpen ? 'End turn' : 'Skip turn'}
@@ -229,6 +298,67 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
   )
 }
 
+function ChoicePrompt({
+  dart,
+  options,
+  marks,
+  label,
+  onChoose,
+  onCancel,
+}: {
+  dart: Dart
+  options: CloseOutOption[]
+  marks: number[]
+  label: (d: Dart) => string
+  onChoose: (to: DartChoice) => void
+  onCancel: () => void
+}) {
+  return (
+    <div
+      className="anim-pop rounded-3xl bg-[#1d1913] p-3 shadow-[0_18px_40px_-10px_rgb(0_0_0/0.9)] ring-metal ring-gold"
+      role="group"
+      aria-label="Choose where this dart counts"
+    >
+      <div className="mb-2 flex items-center justify-between px-1">
+        <span className="text-sm text-cream/70">
+          <span className="font-black text-cream">{label(dart)}</span> — count it as:
+        </span>
+        <button type="button" onClick={onCancel} className="min-h-8 px-2 text-xs text-cream/50">
+          Cancel
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((o) => {
+          const t = CLOSE_OUT_TARGETS[o.target]
+          const have = marks[o.target]
+          const after = Math.min(CLOSE_OUT_MARKS, have + o.marks)
+          const ring = o.to === 'ring'
+          return (
+            <button
+              key={o.to}
+              type="button"
+              onClick={() => onChoose(o.to)}
+              className={cx(
+                'press flex min-h-16 flex-col items-center justify-center rounded-2xl px-2 ring-1',
+                ring
+                  ? t === 'T'
+                    ? 'bg-dgreen/25 ring-dgreen text-cream'
+                    : 'bg-dred/25 ring-dred text-cream'
+                  : 'bg-cream text-black ring-cream',
+              )}
+            >
+              <span className="text-xl font-black">{ring ? `${closeOutTargetName(t)} +1` : `${t} ×${o.marks}`}</span>
+              <span className={cx('text-[11px]', ring ? 'text-cream/60' : 'text-black/60')}>
+                {after >= CLOSE_OUT_MARKS ? `closes ${closeOutTargetName(t)}` : `${closeOutTargetName(t)} ${after}/3`}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 /** Fills the remaining vertical space with the largest square that fits (min 240px). */
 function FitSquare({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -245,7 +375,10 @@ function FitSquare({ children }: { children: ReactNode }) {
   return (
     <div ref={ref} className="relative min-h-[240px] flex-1">
       {size > 0 && (
-        <div style={{ width: size, height: size }} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div
+          style={{ width: size, height: size }}
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        >
           {children}
         </div>
       )}
@@ -365,7 +498,9 @@ function History({ cfg, view, onClose }: { cfg: GameConfig; view: ReturnType<typ
               </span>
             </div>
             <div className="text-xs text-cream/65">
-              {t.total !== undefined ? `Turn total ${t.total}` : t.darts.map(dartLabel).join(' · ') || 'No darts'}
+              {t.total !== undefined
+                ? `Turn total ${t.total}`
+                : t.darts.map((d) => dartLabelFor(cfg.type, d)).join(' · ') || 'No darts'}
               {t.note && <span className="ml-2 text-amber-300">{t.note}</span>}
             </div>
           </li>

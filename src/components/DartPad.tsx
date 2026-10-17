@@ -4,13 +4,14 @@ import { cx } from './ui'
 
 interface Props {
   onDart: (d: Dart) => void
+  bullLabel?: string
   highlight?: (segment: number) => boolean
   disabled?: boolean
 }
 
 const NUMS = Array.from({ length: 20 }, (_, i) => i + 1)
 
-export default function DartPad({ onDart, highlight, disabled }: Props) {
+export default function DartPad({ onDart, highlight, disabled, bullLabel = 'Bull 50' }: Props) {
   const [mult, setMult] = useState<Multiplier>(1)
   const throwDart = (segment: number, m: Multiplier = mult) => {
     onDart({ segment, mult: segment === 0 ? 1 : m })
@@ -75,7 +76,7 @@ export default function DartPad({ onDart, highlight, disabled }: Props) {
             hl(25) ? 'bg-dred/40 text-cream ring-dred' : 'bg-panel text-cream/25 ring-white/5',
           )}
         >
-          Bull 50
+          {bullLabel}
         </button>
         <button
           type="button"

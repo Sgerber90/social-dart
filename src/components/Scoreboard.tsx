@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react'
 import type { GameView } from '../game/engine'
-import { CLOSE_OUT_TARGETS, CRICKET_TARGETS, closeOutClosed, ONE_TO_SEVEN_ROUNDS, x01Average } from '../game/engines'
+import {
+  CLOSE_OUT_MARKS,
+  CLOSE_OUT_TARGETS,
+  CRICKET_TARGETS,
+  closeOutClosed,
+  ONE_TO_SEVEN_ROUNDS,
+  x01Average,
+} from '../game/engines'
 import { playerName, sideLabel } from '../game/meta'
 import type { GameConfig, TurnRecord } from '../game/types'
 import { dartLabel } from '../game/types'
@@ -12,16 +19,11 @@ interface Props {
 }
 
 function lastTurn(view: GameView, side: number): TurnRecord | undefined {
-  for (let i = view.turns.length - 1; i >= 0; i--) if (view.turns[i].side === side && view.turns[i].complete) return view.turns[i]
+  for (let i = view.turns.length - 1; i >= 0; i--)
+    if (view.turns[i].side === side && view.turns[i].complete) return view.turns[i]
 }
 
-function SideShell({
-  cfg,
-  view,
-  i,
-  children,
-  out,
-}: Props & { i: number; children: ReactNode; out?: boolean }) {
+function SideShell({ cfg, view, i, children, out }: Props & { i: number; children: ReactNode; out?: boolean }) {
   const side = cfg.sides[i]
   const active = view.side === i && !view.finished
   const team = side.playerIds.length > 1
@@ -67,7 +69,11 @@ export default function Scoreboard({ cfg, view }: Props) {
             <SideShell key={i} cfg={cfg} view={view} i={i}>
               <span
                 key={s.remaining[i]}
-                className={cx('anim-pop font-black tabular-nums leading-none tracking-tight', n > 2 ? 'text-4xl' : 'text-6xl', 'mt-1')}
+                className={cx(
+                  'anim-pop font-black tabular-nums leading-none tracking-tight',
+                  n > 2 ? 'text-4xl' : 'text-6xl',
+                  'mt-1',
+                )}
               >
                 {s.remaining[i]}
               </span>
@@ -100,7 +106,9 @@ export default function Scoreboard({ cfg, view }: Props) {
         if (s.kind === 'oneToSeven')
           return (
             <SideShell key={i} cfg={cfg} view={view} i={i}>
-              <span key={s.scores[i]} className="anim-pop mt-1 text-5xl font-black tabular-nums">{s.scores[i]}</span>
+              <span key={s.scores[i]} className="anim-pop mt-1 text-5xl font-black tabular-nums">
+                {s.scores[i]}
+              </span>
               <span className="text-[11px] text-cream/45">
                 {s.rounds[i] >= ONE_TO_SEVEN_ROUNDS ? 'done' : `round ${s.rounds[i] + 1} / ${ONE_TO_SEVEN_ROUNDS}`}
               </span>
@@ -112,7 +120,9 @@ export default function Scoreboard({ cfg, view }: Props) {
         return (
           <SideShell key={i} cfg={cfg} view={view} i={i}>
             <span className="text-[11px] text-cream/45">next</span>
-            <span key={t} className="anim-pop text-5xl font-black tabular-nums">{t === 0 ? '✓' : t === 25 ? 'Bull' : t}</span>
+            <span key={t} className="anim-pop text-5xl font-black tabular-nums">
+              {t === 0 ? '✓' : t === 25 ? 'Bull' : t}
+            </span>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
               <div className="h-full rounded-full bg-gold" style={{ width: `${(progress / 21) * 100}%` }} />
             </div>
@@ -152,37 +162,86 @@ function CricketBoard({ cfg, view }: Props) {
   )
 }
 
-const CLOSE_OUT_LABEL: Record<string, { label: string; title: string }> = {
-  D: { label: 'D', title: 'Doubles (any double ring)' },
-  T: { label: 'T', title: 'Triples (any triple ring)' },
-  '25': { label: 'B', title: 'Bull' },
-}
-
+/** Close Out chart: hits LEFT per target (3, 2, 1) and a check when closed. */
 function CloseOutBoard({ cfg, view }: Props) {
   const s = view.state
   if (s.kind !== 'closeOut') return null
+  const n = cfg.sides.length
+  const cols = `3.25rem repeat(${n}, minmax(0, 1fr))`
+  const active = (i: number) => view.side === i && !view.finished
   return (
-    <MarkGrid
-      cfg={cfg}
-      view={view}
-      compact
-      rows={CLOSE_OUT_TARGETS.map((t) => ({
-        key: String(t),
-        label: CLOSE_OUT_LABEL[String(t)]?.label ?? String(t),
-        title: CLOSE_OUT_LABEL[String(t)]?.title,
-        tone: t === 'D' ? 'text-[#ff8a8d]' : t === 'T' ? 'text-[#7fe0a6]' : undefined,
-      }))}
-      marks={s.marks}
-      header={(i) => {
-        const c = closeOutClosed(s, i)
-        return (
-          <span key={c} className="anim-pop text-lg font-black tabular-nums">
-            {c}
-            <span className="text-xs font-semibold text-cream/45">/{CLOSE_OUT_TARGETS.length}</span>
+    <div className="overflow-hidden rounded-3xl bg-panel/90 ring-1 ring-white/10" aria-label="Hits left per target">
+      <div className="grid items-end border-b border-white/10" style={{ gridTemplateColumns: cols }}>
+        <span className="pb-1.5 text-center text-[10px] font-semibold uppercase tracking-wider text-cream/35">
+          left
+        </span>
+        {cfg.sides.map((sd, i) => {
+          const left = CLOSE_OUT_TARGETS.length - closeOutClosed(s, i)
+          return (
+            <div
+              key={sd.id}
+              className={cx('flex min-w-0 flex-col items-center px-1 py-1.5', active(i) && 'bg-gold/15')}
+            >
+              <span
+                className={cx(
+                  'w-full truncate text-center text-xs font-semibold',
+                  active(i) ? 'text-gold' : 'text-cream/65',
+                )}
+              >
+                {sideLabel(cfg, sd)}
+              </span>
+              <span key={left} className="anim-pop flex items-baseline gap-1 tabular-nums">
+                <span className="text-2xl font-black leading-tight">{left}</span>
+                <span className="text-[10px] text-cream/45">target{left === 1 ? '' : 's'}</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      {CLOSE_OUT_TARGETS.map((t, ti) => (
+        <div
+          key={String(t)}
+          className="grid items-center border-b border-white/5 last:border-0"
+          style={{ gridTemplateColumns: cols }}
+        >
+          <span
+            className={cx(
+              'text-center text-sm font-bold',
+              t === 'D' ? 'text-[#ff8a8d]' : t === 'T' ? 'text-[#7fe0a6]' : 'text-cream/65',
+            )}
+          >
+            {t === 25 ? 'Bull' : String(t)}
           </span>
-        )
-      }}
-    />
+          {cfg.sides.map((sd, i) => {
+            const left = Math.max(0, CLOSE_OUT_MARKS - s.marks[i][ti])
+            return (
+              <span
+                key={sd.id}
+                className={cx('flex h-[26px] items-center justify-center', active(i) && 'bg-gold/10')}
+                aria-label={left ? `${left} left` : 'closed'}
+              >
+                <span key={left} className="anim-pop">
+                  {left === 0 ? (
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-dgreen/70 text-[11px] font-black text-cream/90">
+                      ✓
+                    </span>
+                  ) : (
+                    <span
+                      className={cx(
+                        'text-xl font-black tabular-nums leading-none',
+                        left === 3 ? 'text-cream/40' : left === 2 ? 'text-cream' : 'text-gold',
+                      )}
+                    >
+                      {left}
+                    </span>
+                  )}
+                </span>
+              </span>
+            )
+          })}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -215,7 +274,9 @@ function MarkGrid({
               view.side === i && !view.finished && 'bg-gold/10',
             )}
           >
-            <span className="w-full truncate text-center text-xs font-semibold text-cream/65">{sideLabel(cfg, sd)}</span>
+            <span className="w-full truncate text-center text-xs font-semibold text-cream/65">
+              {sideLabel(cfg, sd)}
+            </span>
             {header(i)}
           </div>
         ))}
@@ -252,7 +313,13 @@ function MarkGrid({
   )
 }
 
-export function TurnDarts({ darts }: { darts: TurnRecord['darts'] }) {
+export function TurnDarts({
+  darts,
+  label = dartLabel,
+}: {
+  darts: TurnRecord['darts']
+  label?: (d: TurnRecord['darts'][number]) => string
+}) {
   return (
     <div className="flex gap-2">
       {[0, 1, 2].map((k) => (
@@ -269,7 +336,13 @@ export function TurnDarts({ darts }: { darts: TurnRecord['darts'] }) {
               : 'text-cream/25 ring-white/10 ring-dashed',
           )}
         >
-          {darts[k] ? <span key={dartLabel(darts[k])} className="anim-pop">{dartLabel(darts[k])}</span> : k + 1}
+          {darts[k] ? (
+            <span key={label(darts[k])} className="anim-pop">
+              {label(darts[k])}
+            </span>
+          ) : (
+            k + 1
+          )}
         </span>
       ))}
     </div>

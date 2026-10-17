@@ -1,4 +1,4 @@
-import type { Dart, GameConfig } from './types'
+import type { Dart, DartChoice, GameConfig } from './types'
 import { dartValue, isDouble } from './types'
 import { isCheckoutPossible, isPossibleTurnTotal } from './checkout'
 
@@ -17,7 +17,7 @@ export interface GameResult {
 export interface Engine<S> {
   init(cfg: GameConfig): S
   startTurn(s: S, side: number): void
-  dart(s: S, side: number, dart: Dart, cfg: GameConfig): DartResult
+  dart(s: S, side: number, dart: Dart, cfg: GameConfig, choice?: DartChoice): DartResult
   /** Whole-turn total (keypad). Return null if not supported / invalid. */
   total?(s: S, side: number, n: number, cfg: GameConfig): DartResult | null
   endTurn(s: S, side: number, cfg: GameConfig): void
@@ -251,18 +251,40 @@ export interface CloseOutState {
   marks: number[][] // side -> per CLOSE_OUT_TARGETS index (capped at 3)
 }
 
-/** Marks a single dart gives to each Close Out target (before capping). */
-export function closeOutMarks(dart: Dart): Partial<Record<CloseOutTarget, number>> {
-  const out: Partial<Record<CloseOutTarget, number>> = {}
-  if (dart.segment === 25) {
-    out[25] = dart.mult // outer bull 1, bullseye 2
-    return out
-  }
-  if (dart.segment < 1 || dart.segment > 20) return out
-  if (dart.segment >= 15) out[dart.segment as CloseOutTarget] = dart.mult
-  if (dart.mult === 2) out.D = 1
-  if (dart.mult === 3) out.T = 1
+export interface CloseOutOption {
+  to: DartChoice
+  /** index into CLOSE_OUT_TARGETS */
+  target: number
+  marks: number
+}
+
+const coIndex = (t: CloseOutTarget) => CLOSE_OUT_TARGETS.indexOf(t)
+
+/**
+ * Where a dart can count in Close Out. Each dart counts ONCE:
+ * - D/T on 15-20: either 2/3 marks on the number, or 1 mark on Doubles/Triples (thrower picks)
+ * - D/T on 1-14: only 1 mark on Doubles/Triples
+ * - single 15-20: 1 mark on the number; single 1-14 / miss: nothing
+ * - outer bull 1 Bull mark; bullseye ("Cherry") 2 Bull marks, never a double
+ */
+export function closeOutOptions(dart: Dart): CloseOutOption[] {
+  const { segment, mult } = dart
+  if (segment === 25) return [{ to: 'number', target: coIndex(25), marks: mult }]
+  if (segment < 1 || segment > 20) return []
+  const out: CloseOutOption[] = []
+  if (segment >= 15) out.push({ to: 'number', target: coIndex(segment as CloseOutTarget), marks: mult })
+  if (mult === 2) out.push({ to: 'ring', target: coIndex('D'), marks: 1 })
+  if (mult === 3) out.push({ to: 'ring', target: coIndex('T'), marks: 1 })
   return out
+}
+
+/** Options that still do something for this side (target not yet closed). */
+export function closeOutOpenOptions(s: CloseOutState, side: number, dart: Dart): CloseOutOption[] {
+  return closeOutOptions(dart).filter((o) => s.marks[side][o.target] < CLOSE_OUT_MARKS)
+}
+
+export function closeOutTargetName(t: CloseOutTarget): string {
+  return t === 'D' ? 'Doubles' : t === 'T' ? 'Triples' : t === 25 ? 'Bull' : String(t)
 }
 
 export function closeOutClosed(s: CloseOutState, side: number): number {
@@ -272,18 +294,18 @@ export function closeOutClosed(s: CloseOutState, side: number): number {
 export const closeOut: Engine<CloseOutState> = {
   init: (cfg) => ({ kind: 'closeOut', marks: cfg.sides.map(() => CLOSE_OUT_TARGETS.map(() => 0)) }),
   startTurn() {},
-  dart(s, side, dart) {
-    let added = 0
-    const gains = closeOutMarks(dart)
-    CLOSE_OUT_TARGETS.forEach((t, ti) => {
-      const g = gains[t] ?? 0
-      const take = Math.min(g, CLOSE_OUT_MARKS - s.marks[side][ti])
-      if (take > 0) {
-        s.marks[side][ti] += take
-        added += take
-      }
-    })
-    return { points: added }
+  dart(s, side, dart, _cfg, choice) {
+    const open = closeOutOpenOptions(s, side, dart)
+    // Use the chosen option if it is still open; otherwise the only/first open option.
+    const opt = open.find((o) => o.to === choice) ?? open[0]
+    if (!opt) return { points: 0 }
+    const take = Math.min(opt.marks, CLOSE_OUT_MARKS - s.marks[side][opt.target])
+    s.marks[side][opt.target] += take
+    const both = closeOutOptions(dart).length > 1
+    return {
+      points: take,
+      note: both && opt.to === 'ring' ? `→ ${closeOutTargetName(CLOSE_OUT_TARGETS[opt.target])}` : undefined,
+    }
   },
   endTurn() {},
   eliminated: () => false,

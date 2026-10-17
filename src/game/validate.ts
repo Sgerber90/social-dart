@@ -34,7 +34,7 @@ function validDart(v: unknown): boolean {
 
 export function validAction(v: unknown): v is Action {
   if (!isObj(v)) return false
-  if (v.t === 'dart') return validDart(v.dart)
+  if (v.t === 'dart') return validDart(v.dart) && (v.to === undefined || v.to === 'number' || v.to === 'ring')
   if (v.t === 'total') return isInt(v.n, 0, 180)
   return v.t === 'end'
 }

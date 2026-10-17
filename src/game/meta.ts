@@ -1,4 +1,5 @@
-import type { GameConfig, Side } from './types'
+import type { Dart, GameConfig, GameType, Side } from './types'
+import { dartLabel } from './types'
 
 export type GameChoice = '501' | '301' | 'killer' | 'oneToSeven' | 'cricket' | 'closeOut' | 'atc'
 
@@ -11,7 +12,7 @@ export const GAME_CHOICES: { id: GameChoice; title: string; blurb: string; casua
   {
     id: 'closeOut',
     title: 'Close Out',
-    blurb: 'Race to close 15–20, Doubles, Triples and Bull. No points.',
+    blurb: 'Close 15–20, Doubles, Triples and Bull. Each dart counts once. No points.',
     casual: true,
   },
   { id: 'atc', title: 'Around the Clock', blurb: 'Hit 1 to 20 in order, then the bull.', casual: true },
@@ -65,4 +66,10 @@ export function assignKillerNumbers(
     used.add(n)
   }
   return out
+}
+
+/** Dart label with game-specific names (the bullseye is the "Cherry" in Close Out). */
+export function dartLabelFor(type: GameType, d: Dart): string {
+  if (type === 'closeOut' && d.segment === 25 && d.mult === 2) return 'Cherry'
+  return dartLabel(d)
 }
