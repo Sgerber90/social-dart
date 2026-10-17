@@ -208,32 +208,44 @@ function CloseOutBoard({ cfg, view }: Props) {
             className={cx(
               'text-center text-sm font-bold',
               t === 'D' ? 'text-[#ff8a8d]' : t === 'T' ? 'text-[#7fe0a6]' : 'text-cream/65',
+              // struck through once the current thrower has closed it
+              !view.finished && s.marks[view.side][ti] >= CLOSE_OUT_MARKS && 'line-through decoration-2 opacity-50',
             )}
           >
             {t === 25 ? 'Bull' : String(t)}
           </span>
           {cfg.sides.map((sd, i) => {
-            const left = Math.max(0, CLOSE_OUT_MARKS - s.marks[i][ti])
+            const m = Math.min(CLOSE_OUT_MARKS, s.marks[i][ti])
+            const closed = m >= CLOSE_OUT_MARKS
             return (
               <span
                 key={sd.id}
-                className={cx('flex h-[26px] items-center justify-center', active(i) && 'bg-gold/10')}
-                aria-label={left ? `${left} left` : 'closed'}
+                className={cx(
+                  'flex h-7 items-center justify-center',
+                  closed ? 'bg-dgreen/45' : active(i) && 'bg-gold/10',
+                )}
+                aria-label={closed ? 'closed' : `${CLOSE_OUT_MARKS - m} left`}
               >
-                <span key={left} className="anim-pop">
-                  {left === 0 ? (
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-dgreen/70 text-[11px] font-black text-cream/90">
-                      ✓
-                    </span>
-                  ) : (
-                    <span
-                      className={cx(
-                        'text-xl font-black tabular-nums leading-none',
-                        left === 3 ? 'text-cream/40' : left === 2 ? 'text-cream' : 'text-gold',
-                      )}
-                    >
-                      {left}
-                    </span>
+                <span className="relative flex items-center gap-2">
+                  {Array.from({ length: CLOSE_OUT_MARKS }, (_, k) =>
+                    k < m ? (
+                      <span
+                        key={`x${k}`}
+                        className={cx(
+                          'anim-pop w-4 text-center text-lg font-black leading-none',
+                          closed ? 'text-cream' : 'text-gold',
+                        )}
+                      >
+                        ✕
+                      </span>
+                    ) : (
+                      <span key={`d${k}`} className="w-4 text-center text-2xl leading-none text-cream/40">
+                        •
+                      </span>
+                    ),
+                  )}
+                  {closed && (
+                    <span className="pointer-events-none absolute inset-x-[-4px] top-1/2 h-[2px] -translate-y-1/2 rounded bg-cream/90" />
                   )}
                 </span>
               </span>

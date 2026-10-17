@@ -111,7 +111,7 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
     const open = CLOSE_OUT_TARGETS.filter((_, ti) => mine[ti] < CLOSE_OUT_MARKS).map((t) =>
       t === 25 ? 'B' : String(t),
     )
-    hint = open.length ? `${open.length} to close${open.includes('B') ? ' · Cherry = 2' : ''}` : null
+    hint = open.length ? `${open.length} to close${open.includes('B') ? ' · Cherry\u00a0=\u00a02' : ''}` : null
     // Numbers 15-20 and bull are targets; every double/triple ring counts too.
     highlight = (n) => n >= 15
     regionHighlight = (d) => d.segment >= 15 || d.mult > 1
@@ -366,14 +366,14 @@ function FitSquare({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const measure = () => setSize(Math.max(240, Math.floor(Math.min(el.clientWidth, el.clientHeight))))
+    const measure = () => setSize(Math.max(200, Math.floor(Math.min(el.clientWidth, el.clientHeight))))
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
   return (
-    <div ref={ref} className="relative min-h-[240px] flex-1">
+    <div ref={ref} className="relative min-h-[200px] flex-1">
       {size > 0 && (
         <div
           style={{ width: size, height: size }}
