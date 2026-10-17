@@ -1,0 +1,240 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --color-board: #0c0b0a;
+  --color-panel: #161412;
+  --color-cream: #efe2bf;
+  --color-dred: #d42a2f;
+  --color-dgreen: #1d8a4a;
+  --color-gold: #d4a640;
+  --color-gold-hi: #f6dc8e;
+  --color-gold-lo: #8a6420;
+}
+
+html,
+body,
+#root {
+  min-height: 100dvh;
+}
+
+body {
+  background-color: var(--color-board);
+  color: var(--color-cream);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Faint dartboard sectors radiating from the top of the screen */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(70rem 40rem at 50% -12rem, rgb(212 166 64 / 0.13), transparent 60%),
+    repeating-conic-gradient(from -9deg at 50% -6rem, rgb(255 255 255 / 0.025) 0 18deg, transparent 18deg 36deg);
+  mask-image: radial-gradient(60rem 50rem at 50% 0, #000 30%, transparent 75%);
+}
+
+button {
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.text-metal {
+  background: linear-gradient(180deg, var(--color-gold-hi), var(--color-gold) 55%, var(--color-gold-lo));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.bg-metal {
+  background: linear-gradient(180deg, #f3d382 0%, #d4a640 45%, #a87a28 100%);
+}
+.ring-metal {
+  box-shadow:
+    0 0 0 1.5px rgb(212 166 64 / 0.9),
+    0 0 24px -4px rgb(212 166 64 / 0.55);
+}
+
+/* --- dartboard feedback --- */
+.db-seg {
+  transition: filter 120ms ease;
+}
+@media (hover: hover) {
+  .db-seg:hover {
+    filter: brightness(1.25);
+  }
+}
+.db-seg:active {
+  filter: brightness(1.45);
+}
+.db-flash {
+  animation: db-flash 450ms ease-out;
+}
+@keyframes db-flash {
+  0% {
+    filter: brightness(2.2) saturate(1.4);
+  }
+  100% {
+    filter: none;
+  }
+}
+.db-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: db-ping 650ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes db-ping {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+.db-pin {
+  animation: fade-out 900ms ease-in forwards;
+}
+.db-label {
+  paint-order: stroke;
+  stroke: #000;
+  stroke-width: 3px;
+  animation: db-float 900ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.db-label-single {
+  fill: var(--color-cream);
+}
+.db-label-double {
+  fill: #ff6b6f;
+}
+.db-label-treble {
+  fill: #4fd98a;
+}
+.db-label-miss {
+  fill: #a3a3a3;
+}
+@keyframes db-float {
+  0% {
+    transform: translateY(4px) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(0) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-14px) scale(1);
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* --- UI animations --- */
+.anim-pop {
+  animation: pop 380ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.anim-shake {
+  animation: shake 420ms ease-in-out;
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+.anim-rise {
+  animation: rise 420ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes rise {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.anim-fade {
+  animation: fadein 220ms ease-out both;
+}
+@keyframes fadein {
+  from {
+    opacity: 0;
+  }
+}
+.anim-sheet {
+  animation: sheet 340ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes sheet {
+  from {
+    transform: translateY(40px) scale(0.97);
+    opacity: 0;
+  }
+}
+.anim-spin-slow {
+  animation: spin 24s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.press {
+  transition: transform 90ms ease;
+}
+.press:active {
+  transform: scale(0.96);
+}
+
+/* confetti */
+.confetti {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti linear forwards;
+}
+@keyframes confetti {
+  to {
+    transform: translate3d(var(--dx), 110dvh, 0) rotate(var(--rot));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
