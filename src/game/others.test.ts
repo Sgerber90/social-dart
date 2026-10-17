@@ -25,7 +25,7 @@ describe('Killer', () => {
     expect(s.lives).toEqual([3, 3, 3])
   })
 
-  it('singles and trebles do not count', () => {
+  it('singles and triples do not count', () => {
     const s = st(kc(), darts('S20 T20'))
     expect(s.killer[0]).toBe(false)
   })

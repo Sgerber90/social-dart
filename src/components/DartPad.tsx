@@ -37,7 +37,7 @@ export default function DartPad({ onDart, highlight, disabled }: Props) {
       <div className="grid grid-cols-3 gap-2">
         {multBtn(1, 'Single', 'bg-cream text-black ring-cream')}
         {multBtn(2, 'Double', 'bg-dred text-white ring-dred')}
-        {multBtn(3, 'Treble', 'bg-dgreen text-white ring-dgreen')}
+        {multBtn(3, 'Triple', 'bg-dgreen text-white ring-dgreen')}
       </div>
       <div className="grid grid-cols-5 gap-2">
         {NUMS.map((n) => (

@@ -241,7 +241,7 @@ export const atc: Engine<AtcState> = {
 }
 
 // ---------------------------------------------------------------- Close Out (no-score closing race)
-/** Target order on the mark grid. 'D' = any double ring, 'T' = any treble ring, 25 = bull. */
+/** Target order on the mark grid. 'D' = any double ring, 'T' = any triple ring, 25 = bull. */
 export const CLOSE_OUT_TARGETS = [20, 19, 18, 17, 16, 15, 'D', 'T', 25] as const
 export type CloseOutTarget = (typeof CLOSE_OUT_TARGETS)[number]
 export const CLOSE_OUT_MARKS = 3

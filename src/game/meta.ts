@@ -11,7 +11,7 @@ export const GAME_CHOICES: { id: GameChoice; title: string; blurb: string; casua
   {
     id: 'closeOut',
     title: 'Close Out',
-    blurb: 'Race to close 15–20, Doubles, Trebles and Bull. No points.',
+    blurb: 'Race to close 15–20, Doubles, Triples and Bull. No points.',
     casual: true,
   },
   { id: 'atc', title: 'Around the Clock', blurb: 'Hit 1 to 20 in order, then the bull.', casual: true },

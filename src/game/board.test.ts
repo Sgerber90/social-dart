@@ -11,7 +11,7 @@ describe('board geometry', () => {
     expect(BOARD_ORDER[15]).toBe(11) // 11 at 9 o'clock
   })
   it('rings are ordered from the bull outwards', () => {
-    const r = [RINGS.bull, RINGS.outerBull, RINGS.trebleIn, RINGS.trebleOut, RINGS.doubleIn, RINGS.doubleOut, RINGS.numbers]
+    const r = [RINGS.bull, RINGS.outerBull, RINGS.tripleIn, RINGS.tripleOut, RINGS.doubleIn, RINGS.doubleOut, RINGS.numbers]
     expect([...r].sort((a, b) => a - b)).toEqual(r)
   })
 })

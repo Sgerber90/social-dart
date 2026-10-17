@@ -42,9 +42,9 @@ const REGIONS: Region[] = (() => {
     const ring = dark ? C.red : C.green
     const add = (r0: number, r1: number, mult: Multiplier, fill: string, tag: string) =>
       out.push({ key: `${tag}${n}`, d: sector(r0, r1, start, end), fill, dart: { segment: n, mult } })
-    add(RINGS.outerBull, RINGS.trebleIn, 1, single, 'si')
-    add(RINGS.trebleIn, RINGS.trebleOut, 3, ring, 'T')
-    add(RINGS.trebleOut, RINGS.doubleIn, 1, single, 'so')
+    add(RINGS.outerBull, RINGS.tripleIn, 1, single, 'si')
+    add(RINGS.tripleIn, RINGS.tripleOut, 3, ring, 'T')
+    add(RINGS.tripleOut, RINGS.doubleIn, 1, single, 'so')
     add(RINGS.doubleIn, RINGS.doubleOut, 2, ring, 'D')
   })
   return out
@@ -56,7 +56,7 @@ interface Hit {
   y: number
   label: string
   key: string
-  tone: 'single' | 'double' | 'treble' | 'miss'
+  tone: 'single' | 'double' | 'triple' | 'miss'
 }
 
 interface Props {
@@ -90,7 +90,7 @@ export default function Dartboard({ onDart, highlight, disabled, numbers = true,
       y = p.y
     }
     const id = ++idRef.current
-    const tone = dart.segment === 0 ? 'miss' : dart.mult === 3 ? 'treble' : dart.mult === 2 ? 'double' : 'single'
+    const tone = dart.segment === 0 ? 'miss' : dart.mult === 3 ? 'triple' : dart.mult === 2 ? 'double' : 'single'
     setHits((h) => [...h.slice(-4), { id, x, y, label: dartLabel(dart), key, tone }])
     svg?.animate(
       [{ transform: 'scale(1)' }, { transform: `scale(${dart.segment === 0 ? 0.99 : 0.975})` }, { transform: 'scale(1)' }],

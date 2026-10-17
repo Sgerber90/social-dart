@@ -154,7 +154,7 @@ function CricketBoard({ cfg, view }: Props) {
 
 const CLOSE_OUT_LABEL: Record<string, { label: string; title: string }> = {
   D: { label: 'D', title: 'Doubles (any double ring)' },
-  T: { label: 'T', title: 'Trebles (any treble ring)' },
+  T: { label: 'T', title: 'Triples (any triple ring)' },
   '25': { label: 'B', title: 'Bull' },
 }
 

@@ -82,7 +82,7 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
       t === 25 ? 'B' : String(t),
     )
     hint = open.length ? `Open: ${open.join(' ')}` : null
-    // Numbers 15-20 and bull are targets; every double/treble ring counts too.
+    // Numbers 15-20 and bull are targets; every double/triple ring counts too.
     highlight = (n) => n >= 15
     regionHighlight = (d) => d.segment >= 15 || d.mult > 1
   } else if (s.kind === 'killer') {
