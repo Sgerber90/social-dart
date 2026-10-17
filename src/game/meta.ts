@@ -1,6 +1,6 @@
 import type { GameConfig, Side } from './types'
 
-export type GameChoice = '501' | '301' | 'killer' | 'oneToSeven' | 'cricket' | 'atc'
+export type GameChoice = '501' | '301' | 'killer' | 'oneToSeven' | 'cricket' | 'closeOut' | 'atc'
 
 export const GAME_CHOICES: { id: GameChoice; title: string; blurb: string; casual?: boolean }[] = [
   { id: '501', title: '501', blurb: 'Classic X01 from 501. Double-out optional.' },
@@ -8,6 +8,12 @@ export const GAME_CHOICES: { id: GameChoice; title: string; blurb: string; casua
   { id: 'killer', title: 'Killer', blurb: 'Hit your double to become a killer, then take lives.' },
   { id: 'oneToSeven', title: '1 to 7', blurb: 'Rounds 1–7, only the round number scores. Highest total wins.' },
   { id: 'cricket', title: 'Cricket', blurb: 'Close 15–20 and bull, score on open numbers.', casual: true },
+  {
+    id: 'closeOut',
+    title: 'Close Out',
+    blurb: 'Race to close 15–20, Doubles, Trebles and Bull. No points.',
+    casual: true,
+  },
   { id: 'atc', title: 'Around the Clock', blurb: 'Hit 1 to 20 in order, then the bull.', casual: true },
 ]
 
@@ -21,6 +27,8 @@ export function gameTitle(cfg: GameConfig): string {
       return '1 to 7'
     case 'cricket':
       return 'Cricket'
+    case 'closeOut':
+      return 'Close Out'
     case 'atc':
       return 'Around the Clock'
   }

@@ -16,7 +16,7 @@ export default defineConfig({
       manifest: {
         name: 'Social Dart',
         short_name: 'Social Dart',
-        description: 'Darts scorer for the pub and the garage: 501, 301, Killer, 1 to 7, Cricket, Around the Clock. No sign-ups.',
+        description: 'Darts scorer for the pub and the garage: 501, 301, Killer, 1 to 7, Cricket, Close Out, Around the Clock. No sign-ups.',
         id: '/',
         start_url: './',
         scope: './',

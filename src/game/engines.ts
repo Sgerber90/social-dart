@@ -240,6 +240,59 @@ export const atc: Engine<AtcState> = {
   },
 }
 
-export type GameState = X01State | KillerState | OneToSevenState | CricketState | AtcState
+// ---------------------------------------------------------------- Close Out (no-score closing race)
+/** Target order on the mark grid. 'D' = any double ring, 'T' = any treble ring, 25 = bull. */
+export const CLOSE_OUT_TARGETS = [20, 19, 18, 17, 16, 15, 'D', 'T', 25] as const
+export type CloseOutTarget = (typeof CLOSE_OUT_TARGETS)[number]
+export const CLOSE_OUT_MARKS = 3
 
-export const ENGINES = { x01, killer, oneToSeven, cricket, atc } as const
+export interface CloseOutState {
+  kind: 'closeOut'
+  marks: number[][] // side -> per CLOSE_OUT_TARGETS index (capped at 3)
+}
+
+/** Marks a single dart gives to each Close Out target (before capping). */
+export function closeOutMarks(dart: Dart): Partial<Record<CloseOutTarget, number>> {
+  const out: Partial<Record<CloseOutTarget, number>> = {}
+  if (dart.segment === 25) {
+    out[25] = dart.mult // outer bull 1, bullseye 2
+    return out
+  }
+  if (dart.segment < 1 || dart.segment > 20) return out
+  if (dart.segment >= 15) out[dart.segment as CloseOutTarget] = dart.mult
+  if (dart.mult === 2) out.D = 1
+  if (dart.mult === 3) out.T = 1
+  return out
+}
+
+export function closeOutClosed(s: CloseOutState, side: number): number {
+  return s.marks[side].filter((m) => m >= CLOSE_OUT_MARKS).length
+}
+
+export const closeOut: Engine<CloseOutState> = {
+  init: (cfg) => ({ kind: 'closeOut', marks: cfg.sides.map(() => CLOSE_OUT_TARGETS.map(() => 0)) }),
+  startTurn() {},
+  dart(s, side, dart) {
+    let added = 0
+    const gains = closeOutMarks(dart)
+    CLOSE_OUT_TARGETS.forEach((t, ti) => {
+      const g = gains[t] ?? 0
+      const take = Math.min(g, CLOSE_OUT_MARKS - s.marks[side][ti])
+      if (take > 0) {
+        s.marks[side][ti] += take
+        added += take
+      }
+    })
+    return { points: added }
+  },
+  endTurn() {},
+  eliminated: () => false,
+  result(s) {
+    const w = s.marks.findIndex((m) => m.every((x) => x >= CLOSE_OUT_MARKS))
+    return w >= 0 ? { finished: true, winners: [w] } : NO_RESULT
+  },
+}
+
+export type GameState = X01State | KillerState | OneToSevenState | CricketState | CloseOutState | AtcState
+
+export const ENGINES = { x01, killer, oneToSeven, cricket, closeOut, atc } as const

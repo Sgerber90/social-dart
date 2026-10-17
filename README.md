@@ -12,6 +12,7 @@ A fast, mobile-first darts scorer with a real tap-the-board input. No sign-ups, 
 | **Killer** | Each side has a number (randomised or picked, unique 1–20). Hit your own **double** to become a Killer. Killers take a life with every double of an opponent's number. A Killer who hits their own double loses a life. Lives are configurable (default 3). Last one standing wins. |
 | **1 to 7** | Shanghai-style. Rounds 1–7, and only the round's number scores: single/double/treble = 1×/2×/3× the number. Highest total after round 7 wins (ties are shown as a draw). |
 | **Cricket** (casual) | 15–20 and bull. Three marks close a number (treble = 3, double = 2, outer bull = 1, bullseye = 2). Extra marks score while any opponent still has it open. Win by closing everything with at least as many points as everyone else. |
+| **Close Out** (casual) | No-points closing race. Targets: 15, 16, 17, 18, 19, 20, **Doubles**, **Trebles**, **Bull**, and each needs 3 marks. On 15–20 a single/double/treble gives 1/2/3 marks. Any double-ring hit (any number 1–20) also gives Doubles 1 mark, and any treble-ring hit gives Trebles 1 mark. Outer bull = 1 and bullseye = 2 marks on Bull (the bullseye doesn't count toward Doubles). Marks over 3 are ignored, there's no opening double, and the first side to close all nine wins immediately. |
 | **Around the Clock** (casual) | Hit 1 → 20 in order (any ring counts), then the bull (25 or 50). |
 
 **Players & teams:** add, rename, reorder, shuffle or remove players. Turn on teams (2–4): a team shares one score and its members take turns in rotation.
@@ -36,7 +37,7 @@ npm run preview   # serve the build
 src/
   game/           # pure TypeScript game logic, no React or DOM (portable to native/server)
     types.ts      # Dart, Side, GameConfig, Action, TurnRecord
-    engines.ts    # one engine per game: x01, killer, oneToSeven, cricket, atc
+    engines.ts    # one engine per game: x01, killer, oneToSeven, cricket, closeOut, atc
     engine.ts     # replay(config, actions) → GameView; applyAction / undo / rematch
     checkout.ts   # X01 checkout suggestions & validity
     board.ts      # dartboard order + ring geometry

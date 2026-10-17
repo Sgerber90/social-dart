@@ -6,7 +6,7 @@ export interface Dart {
   mult: Multiplier
 }
 
-export type GameType = 'x01' | 'killer' | 'oneToSeven' | 'cricket' | 'atc'
+export type GameType = 'x01' | 'killer' | 'oneToSeven' | 'cricket' | 'closeOut' | 'atc'
 
 export interface Player {
   id: string

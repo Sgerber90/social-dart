@@ -12,6 +12,7 @@ const ART: Record<GameChoice, (d: Dart) => boolean> = {
   killer: (d) => d.mult === 2 && d.segment !== 25,
   oneToSeven: (d) => d.segment >= 1 && d.segment <= 7,
   cricket: (d) => d.segment >= 15,
+  closeOut: (d) => d.segment >= 15 || d.mult > 1,
   atc: (d) => d.mult === 1 && d.segment !== 25,
 }
 
@@ -130,6 +131,7 @@ export default function Setup({ initial, onStart, onResume }: Props) {
               onClick={() => setChoice(g.id)}
               aria-pressed={choice === g.id}
               className={cx(
+                i === GAME_CHOICES.length - 1 && GAME_CHOICES.length % 2 === 1 && 'col-span-2',
                 'press anim-rise relative flex min-h-36 flex-col items-start justify-end overflow-hidden rounded-3xl p-4 text-left ring-1 transition',
                 choice === g.id ? 'bg-[#1d1913] ring-metal ring-gold' : 'bg-panel/90 ring-white/10 hover:bg-[#1d1a17]',
               )}

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { applyAction, replay, undo } from '../game/engine'
 import { suggestCheckout, isCheckoutPossible } from '../game/checkout'
-import { CRICKET_TARGETS, ONE_TO_SEVEN_ROUNDS, x01Average } from '../game/engines'
+import { CLOSE_OUT_MARKS, CLOSE_OUT_TARGETS, CRICKET_TARGETS, closeOutClosed, ONE_TO_SEVEN_ROUNDS, x01Average } from '../game/engines'
 import { gameTitle, playerName, sideLabel } from '../game/meta'
 import { dartLabel, type Action, type Dart, type GameConfig } from '../game/types'
 import DartPad from './DartPad'
@@ -61,6 +61,7 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
 
   let hint: string | null = null
   let highlight: ((n: number) => boolean) | undefined
+  let regionHighlight: ((d: Dart) => boolean) | undefined
   if (s.kind === 'x01') {
     const rem = s.remaining[view.side]
     const route = suggestCheckout(rem, dartsLeft, cfg.options.doubleOut)
@@ -75,6 +76,15 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
     highlight = (n) => n === t
   } else if (s.kind === 'cricket') {
     highlight = (n) => CRICKET_TARGETS.includes(n)
+  } else if (s.kind === 'closeOut') {
+    const mine = s.marks[view.side]
+    const open = CLOSE_OUT_TARGETS.filter((_, ti) => mine[ti] < CLOSE_OUT_MARKS).map((t) =>
+      t === 25 ? 'B' : String(t),
+    )
+    hint = open.length ? `Open: ${open.join(' ')}` : null
+    // Numbers 15-20 and bull are targets; every double/treble ring counts too.
+    highlight = (n) => n >= 15
+    regionHighlight = (d) => d.segment >= 15 || d.mult > 1
   } else if (s.kind === 'killer') {
     const me = view.side
     hint = s.killer[me]
@@ -148,7 +158,7 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
           />
         ) : effectiveMode === 'board' ? (
           <FitSquare>
-            <Dartboard onDart={onDart} highlight={highlight} disabled={view.finished} />
+            <Dartboard onDart={onDart} highlight={highlight} emphasize={regionHighlight} disabled={view.finished} />
           </FitSquare>
         ) : (
           <DartPad onDart={onDart} highlight={highlight} disabled={view.finished} />
@@ -297,6 +307,7 @@ function WinnerStats({ cfg, view }: { cfg: GameConfig; view: ReturnType<typeof r
     if (s.kind === 'x01') stat = `avg ${x01Average(s, i).toFixed(1)} · ${s.remaining[i]} left`
     if (s.kind === 'oneToSeven') stat = `${s.scores[i]} pts`
     if (s.kind === 'cricket') stat = `${s.points[i]} pts`
+    if (s.kind === 'closeOut') stat = `${closeOutClosed(s, i)}/${CLOSE_OUT_TARGETS.length} closed`
     if (s.kind === 'killer') stat = s.lives[i] > 0 ? `${s.lives[i]} ♥ left` : 'out'
     if (s.kind === 'atc') stat = s.target[i] === 0 ? 'finished' : `on ${s.target[i] === 25 ? 'bull' : s.target[i]}`
     return { name: sideLabel(cfg, sd), stat, win: view.winners.includes(i) }
@@ -342,7 +353,13 @@ function History({ cfg, view, onClose }: { cfg: GameConfig; view: ReturnType<typ
                   t.bust ? 'text-rose-400' : t.win ? 'text-gold' : 'text-cream',
                 )}
               >
-                {t.bust ? 'BUST' : cfg.type === 'killer' || cfg.type === 'atc' ? '' : t.points}
+                {t.bust
+                  ? 'BUST'
+                  : cfg.type === 'killer' || cfg.type === 'atc'
+                    ? ''
+                    : cfg.type === 'closeOut'
+                      ? `+${t.points} mark${t.points === 1 ? '' : 's'}`
+                      : t.points}
                 {t.win && ' 🏆'}
                 {!t.complete && <span className="ml-1 text-xs font-normal text-cream/45">in progress</span>}
               </span>
