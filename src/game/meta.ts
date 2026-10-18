@@ -7,7 +7,7 @@ export const GAME_CHOICES: { id: GameChoice; title: string; blurb: string; casua
   { id: '501', title: '501', blurb: 'Classic X01 from 501. Double-out optional.' },
   { id: '301', title: '301', blurb: 'Quicker X01 from 301. Double-out optional.' },
   { id: 'killer', title: 'Killer', blurb: 'Hit your double to become a killer, then take lives.' },
-  { id: 'oneToSeven', title: '1 to 7', blurb: 'Rounds 1–7, only the round number scores. Highest total wins.' },
+  { id: 'oneToSeven', title: '1 to 7', blurb: 'Race 1→7. Double jumps 2, triple jumps 3. Finish one past 7.' },
   { id: 'cricket', title: 'Cricket', blurb: 'Close 15–20 and bull, score on open numbers.', casual: true },
   {
     id: 'closeOut',
@@ -73,3 +73,15 @@ export function dartLabelFor(type: GameType, d: Dart): string {
   if (type === 'closeOut' && d.segment === 25 && d.mult === 2) return 'Cherry'
   return dartLabel(d)
 }
+
+/** Plain-words rules for 1 to 7 (shown in setup and the README). */
+export const ONE_TO_SEVEN_RULES = [
+  'Throw at 1, then 2, 3… up to 7. Only a hit on your current number counts.',
+  'Single moves you on 1, double 2, triple 3 (on 1, a triple 1 takes you to 4).',
+  'Finish by going exactly one past 7: a single 7, a double 6 or a triple 5.',
+  'Too much bounces back: overshoot by 1 and you stay put, by 2 and you drop back one. So on 7 a double keeps you on 7 and a triple sends you to 6; on 6 a triple keeps you on 6.',
+]
+
+const MEDALS = ['🥇', '🥈', '🥉']
+/** 🥇 🥈 🥉 4th 5th… */
+export const placeText = (p: number) => MEDALS[p - 1] ?? `${p}th`

@@ -10,7 +10,7 @@ A fast, mobile-first darts scorer with a real tap-the-board input. No sign-ups, 
 | --- | --- |
 | **501 / 301** | Count down to exactly zero. Double-out is a toggle (bullseye counts as a double). Bust detection (below zero, 1 left on double-out, or finishing without a double) resets the turn. Checkout suggestions use the darts left in the turn. Shows a 3-dart average. |
 | **Killer** | Each side has a number (randomised or picked, unique 1–20). Hit your own **double** to become a Killer. Killers take a life with every double of an opponent's number. A Killer who hits their own double loses a life. Lives are configurable (default 3). Last one standing wins. |
-| **1 to 7** | Shanghai-style. Rounds 1–7, and only the round's number scores: single/double/triple = 1×/2×/3× the number. Highest total after round 7 wins (ties are shown as a draw). |
+| **1 to 7** | A race through 1, 2 … 7. Only a hit on your current number counts, and the multiplier is how far you move: single +1, double +2, triple +3 (on 1, a triple 1 takes you to 4). Finish by landing exactly one past 7 (single 7, double 6 or triple 5). **Bounce rule:** overshoot by 1 and you stay where you are, overshoot by 2 and you drop back one, so `new = current − (overshoot − 1)`. In practice: on 7, a double keeps you on 7 and a triple sends you back to 6; on 6, a triple keeps you on 6. No points. |
 | **Cricket** (casual) | 15–20 and bull. Three marks close a number (triple = 3, double = 2, outer bull = 1, bullseye = 2). Extra marks score while any opponent still has it open. Win by closing everything with at least as many points as everyone else. |
 | **Close Out** (casual) | A closing race with no points. The targets are 20, 19, 18, 17, 16, 15, **Doubles**, **Triples** and **Bull**, and each needs 3 marks. **Each dart counts once, and the thrower chooses where:** a triple on 15–20 is either 3 marks on that number or 1 mark on Triples, and a double on 15–20 is either 2 marks on the number or 1 mark on Doubles. A double or triple on 1–14 only counts as 1 mark on Doubles or Triples. A single on 15–20 is 1 mark, and a single on 1–14 counts for nothing. The outer bull is 1 Bull mark and the bullseye (the **Cherry**) is 2 Bull marks; it never counts as a double. Marks over 3 are ignored. When both options are open the app asks with two big buttons; if one is already closed for that player, the other is applied automatically. There's no opening double, and the first side to close all nine wins immediately. The chart shows how many hits each player has **left** per target (3/2/1, ✓ when closed) and their total targets left. |
 | **Around the Clock** (casual) | Hit 1 → 20 in order (any ring counts), then the bull (25 or 50). |
@@ -18,6 +18,19 @@ A fast, mobile-first darts scorer with a real tap-the-board input. No sign-ups, 
 **Players & teams:** add, rename, reorder, shuffle or remove players. Turn on teams (2–4): a team shares one score and its members take turns in rotation.
 
 **Input:** X01 has a *Turn total* keypad (with a one-tap *Checkout* button), the interactive *Board* and a *Pad* grid (Single/Double/Triple + number, 25, Bull, Miss). Other games use the Board or the Pad. Undo works one dart (or one keypad total) at a time, even after a win. The app also keeps turn history, a winner screen with stats, and Rematch (the starting order rotates).
+
+## Players, runner-up spots, stats and handicap
+
+- **Players**: a saved list of friends (name and avatar colour) on this device. In setup you tap friends' chips to add them, type a new name to add them to the list as well, and tap A/B/C/D or press **Auto-split** for balanced teams (a snake draft by handicap). You can edit or delete players on the Players tab.
+- **Runner-up spots**: once someone wins, if two or more sides are still in, the app asks *Continue for runner-up spots?* **Yes** keeps playing without the placed sides until only one is left. **No** ranks the rest by progress, such as remaining score, marks, target or lives. Killer ranks everyone by when they were knocked out. Every side gets a final place, and tied progress shares a place.
+- **History**: every finished game is saved as a record (`social-dart:history`, newest 1,000) with its placings, players, darts to finish and X01 darts/points. If you undo a finish, the record is removed. All stats and handicaps are worked out from this list, so it can later be synced for tournaments.
+- **Stats**: games, wins, win %, placings, average place, per-game breakdown and, for 301/501, 3-dart average plus best and average darts to finish. The ranking orders players by average placing score (1st = 100%, last = 0%, ties averaged), then wins, then games played. You can filter it by game type.
+- **Handicap** (golf-style: lower is better, 0 = scratch, range 0–36, start 18). After each game, games replayed oldest first:
+  - side handicap = average of its players
+  - expected = average over opponents of `1 / (1 + 10^((mine − theirs) / 12))`
+  - actual = `(N − place) / (N − 1)`, ties averaged (1 = won, 0 = last)
+  - change = `−K × (actual − expected)`, K = 4 for a player's first 5 games (provisional, shown with *), then 2. Rises are halved. The result is rounded to 0.1 and clamped to 0–36.
+  - Examples: an even 1-v-1 win is −1 (−2 provisional) and a loss +0.5 (+1). In an even 4-player game the places move −2/−0.7/+0.3/+1 while provisional. Beating a stronger field moves you more, up to −2 per game once established.
 
 ## Stack
 

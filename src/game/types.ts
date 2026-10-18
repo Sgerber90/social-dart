@@ -16,6 +16,27 @@ export interface Player {
   name: string
 }
 
+/** A saved friend on the roster. Player ids in games match friend ids, so stats follow the friend. */
+export interface Friend {
+  id: string
+  name: string
+  /** CSS colour for the avatar */
+  color: string
+}
+
+export const FRIEND_COLORS = [
+  '#e2453c',
+  '#2f9e5b',
+  '#d4a640',
+  '#3b82f6',
+  '#d946ef',
+  '#f97316',
+  '#14b8a6',
+  '#a3e635',
+  '#f472b6',
+  '#94a3b8',
+]
+
 /** A side is one scoring unit: a single player or a team. */
 export interface Side {
   id: string
@@ -42,6 +63,10 @@ export type Action =
   | { t: 'dart'; dart: Dart; to?: DartChoice }
   | { t: 'total'; n: number }
   | { t: 'end' }
+  /** After a winner: keep playing for runner-up spots. */
+  | { t: 'continue' }
+  /** After a winner: stop here; the rest are ranked by progress. */
+  | { t: 'stop' }
 
 export interface TurnRecord {
   side: number
@@ -51,6 +76,8 @@ export interface TurnRecord {
   points: number
   bust: boolean
   win: boolean
+  /** 1-based place earned on this turn (winner = 1, runner-up = 2...). */
+  place?: number
   complete: boolean
   note?: string
 }

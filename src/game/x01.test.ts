@@ -115,7 +115,10 @@ describe('X01', () => {
   })
 
   it('teams share a score and rotate players', () => {
-    const c = cfg('x01', [['a', 'b'], ['c', 'd']])
+    const c = cfg('x01', [
+      ['a', 'b'],
+      ['c', 'd'],
+    ])
     const v = replay(c, [total(60), total(60), total(60)])
     expect(v.turns.map((t) => t.playerId)).toEqual(['a', 'c', 'b'])
     expect(v.playerId).toBe('d')

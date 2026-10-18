@@ -47,7 +47,9 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, St
             Reset app
           </button>
         </div>
-        <p className="mt-2 break-all text-[11px] text-cream/30">{String(this.state.error.message || this.state.error)}</p>
+        <p className="mt-2 break-all text-[11px] text-cream/30">
+          {String(this.state.error.message || this.state.error)}
+        </p>
       </div>
     )
   }

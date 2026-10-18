@@ -27,7 +27,10 @@ describe('validateSavedGame', () => {
     ['unknown game type', { config: { ...cfg('x01', 2), type: 'golf' }, actions: [] }],
     ['prototype key as type', { config: { ...cfg('x01', 2), type: 'toString' }, actions: [] }],
     ['no sides', { config: { ...cfg('x01', 2), sides: [] }, actions: [] }],
-    ['side with unknown player', { config: { ...cfg('x01', 2), sides: [{ id: 's', name: 'x', playerIds: ['ghost'] }] }, actions: [] }],
+    [
+      'side with unknown player',
+      { config: { ...cfg('x01', 2), sides: [{ id: 's', name: 'x', playerIds: ['ghost'] }] }, actions: [] },
+    ],
     ['side without playerIds', { config: { ...cfg('x01', 2), sides: [{ id: 's', name: 'x' }] }, actions: [] }],
     ['players not array', { config: { ...cfg('x01', 2), players: {} }, actions: [] }],
     ['options missing', { config: { ...cfg('x01', 2), options: undefined }, actions: [] }],
@@ -58,7 +61,12 @@ describe('validateConfig / validAction', () => {
 
 describe('validateRoster', () => {
   it('keeps valid players and drops junk', () => {
-    const r = validateRoster({ players: [{ id: 'a', name: 'Stefan' }, { id: 5 }, null], teamsOn: 'yes', teamCount: 9, teamOf: { a: 1, b: 'x' } })
+    const r = validateRoster({
+      players: [{ id: 'a', name: 'Stefan' }, { id: 5 }, null],
+      teamsOn: 'yes',
+      teamCount: 9,
+      teamOf: { a: 1, b: 'x' },
+    })
     expect(r).toEqual({ players: [{ id: 'a', name: 'Stefan' }], teamsOn: false, teamCount: 2, teamOf: { a: 1 } })
   })
   it('rejects non-objects', () => {

@@ -21,7 +21,8 @@ export default function Keypad({ onSubmit, remaining, canCheckout, disabled }: P
     onSubmit(x)
     setValue('')
   }
-  const key = 'min-h-14 rounded-2xl text-2xl font-semibold tabular-nums bg-[#211e1a] ring-1 ring-white/10 active:scale-95 transition'
+  const key =
+    'min-h-14 rounded-2xl text-2xl font-semibold tabular-nums bg-[#211e1a] ring-1 ring-white/10 active:scale-95 transition'
   return (
     <div className={cx('flex flex-col gap-2', disabled && 'pointer-events-none opacity-40')}>
       <div className="flex items-center gap-2">

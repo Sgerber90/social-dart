@@ -10,12 +10,35 @@ export interface GameView {
   /** Darts already thrown in the open turn. */
   openDarts: Dart[]
   turnOpen: boolean
+  /** No more darts can be thrown (waiting for a continue/stop decision, or the game is over). */
   finished: boolean
+  /** The game is completely over and every side has a place. */
+  final: boolean
+  /** A winner exists and 2+ sides can still play for runner-up spots. */
+  awaitingContinue: boolean
+  /** Runner-up play is on. */
+  continued: boolean
+  /** Places so far: groups of side indices, best first (a group > 1 = tie). */
+  placings: number[][]
+  /** First place (empty until someone wins). */
   winners: number[]
+  /** Darts each side had thrown when it finished (X01), else null. */
+  finishDarts: (number | null)[]
 }
 
 export function getEngine(cfg: GameConfig): Engine<GameState> {
   return ENGINES[cfg.type] as unknown as Engine<GameState>
+}
+
+/** Place (1-based, ties share the better place) of every side, or null if not placed. */
+export function placeOf(placings: number[][], sides: number): (number | null)[] {
+  const out: (number | null)[] = Array.from({ length: sides }, () => null)
+  let p = 1
+  for (const g of placings) {
+    for (const i of g) out[i] = p
+    p += g.length
+  }
+  return out
 }
 
 export function replay(cfg: GameConfig, actions: Action[]): GameView {
@@ -24,10 +47,18 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
   const n = cfg.sides.length
   const sideTurns = cfg.sides.map(() => 0)
   const turns: TurnRecord[] = []
+  const placings: number[][] = []
+  const placed = new Set<number>()
+  const finishDarts: (number | null)[] = cfg.sides.map(() => null)
   let side = 0
   let open: TurnRecord | null = null
-  let finished = false
-  let winners: number[] = []
+  let final = false
+  let awaiting = false
+  let continued = false
+
+  const pool = () => cfg.sides.map((_, i) => i).filter((i) => !placed.has(i))
+  /** Sides that can still throw for a place. */
+  const contenders = () => pool().filter((i) => !engine.eliminated(s, i))
 
   const playerFor = (i: number) => {
     const ids = cfg.sides[i].playerIds
@@ -48,32 +79,72 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
     open = t
     return t
   }
+  /** Rank everyone not yet placed by progress (ties share a place) and end the game. */
+  const finishRest = () => {
+    const rest = pool().sort((a, b) => engine.progress(s, b) - engine.progress(s, a))
+    let k = 0
+    while (k < rest.length) {
+      const g = [rest[k]]
+      while (k + g.length < rest.length && engine.progress(s, rest[k + g.length]) === engine.progress(s, rest[k])) {
+        g.push(rest[k + g.length])
+      }
+      g.forEach((i) => placed.add(i))
+      placings.push(g)
+      k += g.length
+    }
+    final = true
+    awaiting = false
+  }
+  const advance = () => {
+    for (let k = 1; k <= n; k++) {
+      const c = (side + k) % n
+      if (!placed.has(c) && !engine.eliminated(s, c)) {
+        side = c
+        return
+      }
+    }
+  }
+  /** Check for newly finished sides; returns true if play must pause or stop. */
+  const checkPlaces = (t: TurnRecord): boolean => {
+    const w = engine.winnersAmong(s, cfg, pool())
+    if (!w.length) return false
+    const place = placed.size + 1
+    w.forEach((i) => {
+      placed.add(i)
+      if (engine.dartsThrown) finishDarts[i] = engine.dartsThrown(s, i)
+    })
+    placings.push(w)
+    if (w.includes(t.side)) {
+      t.place = place
+      t.win = place === 1
+    }
+    if (contenders().length <= 1) finishRest()
+    else if (!continued) awaiting = true
+    return true
+  }
   const close = (t: TurnRecord) => {
     t.complete = true
     engine.endTurn(s, side, cfg)
     sideTurns[side]++
     open = null
-    const r = engine.result(s, cfg)
-    if (r.finished) {
-      finished = true
-      winners = r.winners
-      t.win = r.winners.includes(side)
-      return
-    }
-    for (let k = 1; k <= n; k++) {
-      const c = (side + k) % n
-      if (!engine.eliminated(s, c)) {
-        side = c
-        return
-      }
-    }
+    checkPlaces(t)
+    if (!final && !awaiting) advance()
   }
   const addNote = (t: TurnRecord, note?: string) => {
     if (note) t.note = t.note ? `${t.note}; ${note}` : note
   }
 
   for (const a of actions) {
-    if (finished) break
+    if (final) break
+    if (awaiting) {
+      if (a.t === 'continue') {
+        awaiting = false
+        continued = true
+        advance()
+      } else if (a.t === 'stop') finishRest()
+      continue
+    }
+    if (a.t === 'continue' || a.t === 'stop') continue
     if (a.t === 'dart') {
       const t: TurnRecord = open ?? begin()
       const res = engine.dart(s, side, a.dart, cfg, a.to)
@@ -84,8 +155,8 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
         t.bust = true
         t.points = 0
       }
-      const r = engine.result(s, cfg)
-      if (r.finished || res.bust || res.endTurn || t.darts.length >= 3) close(t)
+      const someoneDone = engine.winnersAmong(s, cfg, pool()).length > 0
+      if (someoneDone || res.bust || res.endTurn || t.darts.length >= 3 || engine.eliminated(s, side)) close(t)
     } else if (a.t === 'total') {
       if (open || !engine.total) continue
       const probe = JSON.parse(JSON.stringify(s)) as typeof s
@@ -110,14 +181,20 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
     playerId: cur ? cur.playerId : playerFor(side),
     openDarts: cur ? cur.darts : [],
     turnOpen: !!cur,
-    finished,
-    winners,
+    finished: final || awaiting,
+    final,
+    awaitingContinue: awaiting,
+    continued,
+    placings,
+    winners: placings[0] ?? [],
+    finishDarts,
   }
 }
 
 /** Append an action if it is valid for the current position; otherwise return the list unchanged. */
 export function applyAction(cfg: GameConfig, actions: Action[], a: Action): Action[] {
   const v = replay(cfg, actions)
+  if (a.t === 'continue' || a.t === 'stop') return v.awaitingContinue ? [...actions, a] : actions
   if (v.finished) return actions
   if (a.t === 'total' && v.turnOpen) return actions
   const next = [...actions, a]

@@ -52,7 +52,9 @@ export default function DartPad({ onDart, highlight, disabled, bullLabel = 'Bull
               hl(n) && highlight && 'ring-2 ring-gold/70',
             )}
           >
-            {mult > 1 && <span className="absolute left-1.5 top-1 text-[10px] text-cream/65">{mult === 2 ? 'D' : 'T'}</span>}
+            {mult > 1 && (
+              <span className="absolute left-1.5 top-1 text-[10px] text-cream/65">{mult === 2 ? 'D' : 'T'}</span>
+            )}
             {n}
           </button>
         ))}

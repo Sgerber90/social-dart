@@ -104,7 +104,11 @@ export default function Dartboard({
     const tone = dart.segment === 0 ? 'miss' : dart.mult === 3 ? 'triple' : dart.mult === 2 ? 'double' : 'single'
     setHits((h) => [...h.slice(-4), { id, x, y, label: labelFor(dart), key, tone }])
     svg?.animate(
-      [{ transform: 'scale(1)' }, { transform: `scale(${dart.segment === 0 ? 0.99 : 0.975})` }, { transform: 'scale(1)' }],
+      [
+        { transform: 'scale(1)' },
+        { transform: `scale(${dart.segment === 0 ? 0.99 : 0.975})` },
+        { transform: 'scale(1)' },
+      ],
       { duration: 160, easing: 'ease-out' },
     )
     window.setTimeout(() => setHits((h) => h.filter((k) => k.id !== id)), 900)
@@ -143,7 +147,11 @@ export default function Dartboard({
             const { start, end, mid } = segmentAngle(i)
             const [tx, ty] = polar((RINGS.doubleOut + RINGS.numbers) / 2 + 0.5, mid)
             return (
-              <g key={n} onClick={(e) => fire({ segment: 0, mult: 1 }, 'miss', e)} className={cx(!art && 'cursor-pointer')}>
+              <g
+                key={n}
+                onClick={(e) => fire({ segment: 0, mult: 1 }, 'miss', e)}
+                className={cx(!art && 'cursor-pointer')}
+              >
                 <path d={sector(RINGS.doubleOut, RINGS.numbers, start, end)} fill="transparent" />
                 <text
                   x={tx}

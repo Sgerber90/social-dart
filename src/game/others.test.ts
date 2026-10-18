@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { replay } from './engine'
-import type { AtcState, CricketState, KillerState, OneToSevenState } from './engines'
+import { oneToSevenMove, type AtcState, type CricketState, type KillerState, type OneToSevenState } from './engines'
 import { cfg, darts, end } from './testutil'
 import type { Action } from './types'
 
 describe('Killer', () => {
-  const kc = (lives = 3, n = 3) =>
-    cfg('killer', n, { lives, killerNumbers: { s0: 20, s1: 19, s2: 18 } })
+  const kc = (lives = 3, n = 3) => cfg('killer', n, { lives, killerNumbers: { s0: 20, s1: 19, s2: 18 } })
   const st = (c: ReturnType<typeof kc>, a: Action[]) => replay(c, a).state as KillerState
 
   it('uses configured lives and numbers', () => {
@@ -61,31 +60,51 @@ describe('Killer', () => {
 })
 
 describe('1 to 7', () => {
-  it('scores only the round number, with multipliers', () => {
-    const c = cfg('oneToSeven', 2)
-    const v = replay(c, darts('S1 D1 T1  T1 20 M  2 T2 5'))
-    const s = v.state as OneToSevenState
-    expect(s.scores).toEqual([6 + 8, 3])
-    expect(s.rounds).toEqual([2, 1])
+  const st = (a: Action[], n = 2) => replay(cfg('oneToSeven', n), a).state as OneToSevenState
+
+  it('everyone starts on 1', () => {
+    expect(st([]).target).toEqual([1, 1])
+  })
+  it('only hits on your current target count', () => {
+    expect(st(darts('S2 T5 20')).target[0]).toBe(1)
+  })
+  it('single +1, double +2, triple +3 (on 1, a triple 1 moves you to 4)', () => {
+    expect(st(darts('S1')).target[0]).toBe(2)
+    expect(st(darts('D1')).target[0]).toBe(3)
+    expect(st(darts('T1')).target[0]).toBe(4)
+  })
+  it('advances through several darts in a turn', () => {
+    expect(st(darts('T1 D4 S6')).target[0]).toBe(7)
   })
 
-  it('finishes after round 7 and highest total wins', () => {
-    const c = cfg('oneToSeven', 2)
-    const a: Action[] = []
-    for (let r = 1; r <= 7; r++) {
-      a.push(...darts(`T${r} M M`), ...darts(`S${r} M M`))
-    }
-    const v = replay(c, a)
+  describe("Stefan's bounce examples", () => {
+    it.each([
+      [7, 1, 8, 'on 7 a single finishes'],
+      [7, 2, 7, 'on 7 a double keeps you on 7'],
+      [7, 3, 6, 'on 7 a triple moves you back to 6'],
+      [6, 1, 7, 'on 6 a single goes to 7'],
+      [6, 2, 8, 'on 6 a double finishes'],
+      [6, 3, 6, 'on 6 a triple keeps you on 6'],
+    ])('from %i with x%i → %i (%s)', (from, mult, to) => {
+      expect(oneToSevenMove(from, mult)).toBe(to)
+    })
+    it('no other start position can overshoot', () => {
+      for (let t = 1; t <= 5; t++) for (const m of [1, 2, 3]) expect(oneToSevenMove(t, m)).toBe(t + m)
+    })
+  })
+
+  it('bounce in a real game: T6 on 6 stays, T7 on 7 goes back to 6', () => {
+    // T1: 1→4, T4: 4→7, D7: stay on 7 | p1 misses | T7: 7→6, T6: stay on 6
+    const b = replay(cfg('oneToSeven', 2), darts('T1 T4 D7  M M M  T7 T6 M'))
+    expect((b.state as OneToSevenState).target[0]).toBe(6)
+  })
+
+  it('first to finish wins; no points involved', () => {
+    const v = replay(cfg('oneToSeven', 2), darts('T1 T4 S7'))
     expect(v.finished).toBe(true)
     expect(v.winners).toEqual([0])
-    expect((v.state as OneToSevenState).scores).toEqual([84, 28])
-  })
-
-  it('ties produce multiple winners', () => {
-    const c = cfg('oneToSeven', 2)
-    const a: Action[] = []
-    for (let r = 1; r <= 7; r++) a.push(end, end)
-    expect(replay(c, a).winners).toEqual([0, 1])
+    expect(v.turns[0].note).toContain('Finished')
+    expect(Object.keys(v.state)).toEqual(['kind', 'target'])
   })
 })
 

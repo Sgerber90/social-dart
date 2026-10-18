@@ -1,14 +1,15 @@
 import type { ReactNode } from 'react'
-import type { GameView } from '../game/engine'
+import { placeOf, type GameView } from '../game/engine'
 import {
   CLOSE_OUT_MARKS,
   CLOSE_OUT_TARGETS,
   CRICKET_TARGETS,
   closeOutClosed,
-  ONE_TO_SEVEN_ROUNDS,
+  ONE_TO_SEVEN_FINISH,
+  ONE_TO_SEVEN_LAST,
   x01Average,
 } from '../game/engines'
-import { playerName, sideLabel } from '../game/meta'
+import { placeText, playerName, sideLabel } from '../game/meta'
 import type { GameConfig, TurnRecord } from '../game/types'
 import { dartLabel } from '../game/types'
 import { cx } from './ui'
@@ -23,10 +24,22 @@ function lastTurn(view: GameView, side: number): TurnRecord | undefined {
     if (view.turns[i].side === side && view.turns[i].complete) return view.turns[i]
 }
 
+export function PlaceBadge({ view, i, sides }: { view: GameView; i: number; sides: number }) {
+  const p = placeOf(view.placings, sides)[i]
+  if (!p) return null
+  return (
+    <span className="anim-pop shrink-0 rounded-full bg-gold/20 px-1.5 text-[11px] font-bold text-gold ring-1 ring-gold/40">
+      {placeText(p)}
+    </span>
+  )
+}
+
 function SideShell({ cfg, view, i, children, out }: Props & { i: number; children: ReactNode; out?: boolean }) {
   const side = cfg.sides[i]
   const active = view.side === i && !view.finished
   const team = side.playerIds.length > 1
+  const placed = placeOf(view.placings, cfg.sides.length)[i] !== null
+  out = out || (placed && !view.finished)
   return (
     <div
       className={cx(
@@ -38,6 +51,8 @@ function SideShell({ cfg, view, i, children, out }: Props & { i: number; childre
       <div className="flex items-center gap-2">
         {active && <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-gold" />}
         <span className="truncate text-sm font-semibold text-cream">{sideLabel(cfg, side)}</span>
+        <span className="ml-auto" />
+        <PlaceBadge view={view} i={i} sides={cfg.sides.length} />
       </div>
       {team && (
         <span className="truncate text-[11px] text-cream/45">
@@ -103,17 +118,29 @@ export default function Scoreboard({ cfg, view }: Props) {
             </SideShell>
           )
         }
-        if (s.kind === 'oneToSeven')
+        if (s.kind === 'oneToSeven') {
+          const t = s.target[i]
+          const done = t >= ONE_TO_SEVEN_FINISH
           return (
             <SideShell key={i} cfg={cfg} view={view} i={i}>
-              <span key={s.scores[i]} className="anim-pop mt-1 text-5xl font-black tabular-nums">
-                {s.scores[i]}
+              <span className="text-[11px] text-cream/45">{done ? 'finished' : 'on'}</span>
+              <span key={t} className="anim-pop text-5xl font-black tabular-nums leading-none">
+                {done ? '✓' : t}
               </span>
-              <span className="text-[11px] text-cream/45">
-                {s.rounds[i] >= ONE_TO_SEVEN_ROUNDS ? 'done' : `round ${s.rounds[i] + 1} / ${ONE_TO_SEVEN_ROUNDS}`}
+              <span className="mt-2 flex gap-1" aria-label={done ? 'finished' : `on ${t} of ${ONE_TO_SEVEN_LAST}`}>
+                {Array.from({ length: ONE_TO_SEVEN_LAST }, (_, k) => (
+                  <span
+                    key={k}
+                    className={cx(
+                      'h-1.5 flex-1 rounded-full',
+                      k + 1 < t ? 'bg-gold' : k + 1 === t ? 'bg-cream/70' : 'bg-white/10',
+                    )}
+                  />
+                ))}
               </span>
             </SideShell>
           )
+        }
         // atc
         const t = s.target[i]
         const progress = t === 0 ? 21 : t === 25 ? 20 : t - 1
@@ -190,6 +217,7 @@ function CloseOutBoard({ cfg, view }: Props) {
               >
                 {sideLabel(cfg, sd)}
               </span>
+              <PlaceBadge view={view} i={i} sides={n} />
               <span key={left} className="anim-pop flex items-baseline gap-1 tabular-nums">
                 <span className="text-2xl font-black leading-tight">{left}</span>
                 <span className="text-[10px] text-cream/45">target{left === 1 ? '' : 's'}</span>
@@ -289,6 +317,7 @@ function MarkGrid({
             <span className="w-full truncate text-center text-xs font-semibold text-cream/65">
               {sideLabel(cfg, sd)}
             </span>
+            <PlaceBadge view={view} i={i} sides={cfg.sides.length} />
             {header(i)}
           </div>
         ))}

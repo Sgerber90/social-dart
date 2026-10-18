@@ -9,11 +9,6 @@ export interface DartResult {
   note?: string
 }
 
-export interface GameResult {
-  finished: boolean
-  winners: number[]
-}
-
 export interface Engine<S> {
   init(cfg: GameConfig): S
   startTurn(s: S, side: number): void
@@ -21,11 +16,18 @@ export interface Engine<S> {
   /** Whole-turn total (keypad). Return null if not supported / invalid. */
   total?(s: S, side: number, n: number, cfg: GameConfig): DartResult | null
   endTurn(s: S, side: number, cfg: GameConfig): void
+  /** Side is knocked out (Killer) and is skipped in rotation. */
   eliminated(s: S, side: number): boolean
-  result(s: S, cfg: GameConfig): GameResult
+  /**
+   * Sides in `pool` (sides still competing) that have now finished/won, considering only
+   * the pool. Used for the winner and, in runner-up play, for 2nd, 3rd...
+   */
+  winnersAmong(s: S, cfg: GameConfig, pool: number[]): number[]
+  /** How far a side got (higher = better). Ranks sides that never finished. */
+  progress(s: S, side: number): number
+  /** Darts thrown by a side so far (X01 darts-to-finish). */
+  dartsThrown?(s: S, side: number): number
 }
-
-const NO_RESULT: GameResult = { finished: false, winners: [] }
 
 // ---------------------------------------------------------------- X01
 export interface X01State {
@@ -77,10 +79,9 @@ export const x01: Engine<X01State> = {
   },
   endTurn() {},
   eliminated: () => false,
-  result(s) {
-    const w = s.remaining.findIndex((r) => r === 0)
-    return w >= 0 ? { finished: true, winners: [w] } : NO_RESULT
-  },
+  winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.remaining[i] === 0),
+  progress: (s, side) => -s.remaining[side],
+  dartsThrown: (s, side) => s.darts[side],
 }
 
 export function x01Average(s: X01State, side: number): number {
@@ -93,6 +94,8 @@ export interface KillerState {
   numbers: number[]
   lives: number[]
   killer: boolean[]
+  /** Order of elimination (1 = first out), 0 = still alive. */
+  outAt: number[]
 }
 
 export const killer: Engine<KillerState> = {
@@ -101,6 +104,7 @@ export const killer: Engine<KillerState> = {
     numbers: cfg.sides.map((sd) => cfg.options.killerNumbers[sd.id] ?? 0),
     lives: cfg.sides.map(() => cfg.options.lives),
     killer: cfg.sides.map(() => false),
+    outAt: cfg.sides.map(() => 0),
   }),
   startTurn() {},
   dart(s, side, dart, cfg) {
@@ -114,6 +118,7 @@ export const killer: Engine<KillerState> = {
         return { note: `${name(side)} is a Killer`, points: 1 }
       }
       s.lives[side]--
+      if (s.lives[side] <= 0) s.outAt[side] = Math.max(0, ...s.outAt) + 1
       return {
         note: `${name(side)} hit own double (−1 life)`,
         endTurn: s.lives[side] <= 0,
@@ -121,6 +126,7 @@ export const killer: Engine<KillerState> = {
     }
     if (!s.killer[side]) return {}
     s.lives[target]--
+    if (s.lives[target] <= 0) s.outAt[target] = Math.max(0, ...s.outAt) + 1
     return {
       note: s.lives[target] <= 0 ? `${name(target)} is out!` : `${name(target)} −1 life`,
       points: 1,
@@ -128,46 +134,62 @@ export const killer: Engine<KillerState> = {
   },
   endTurn() {},
   eliminated: (s, side) => s.lives[side] <= 0,
-  result(s) {
-    const alive = s.lives.map((l, i) => (l > 0 ? i : -1)).filter((i) => i >= 0)
-    if (alive.length <= 1 && s.lives.length > 1) return { finished: true, winners: alive }
-    return NO_RESULT
+  winnersAmong(s, _cfg, pool) {
+    // Last one standing. Everyone else is ranked by when they went out.
+    const alive = pool.filter((i) => s.lives[i] > 0)
+    return alive.length === 1 && s.lives.length > 1 && s.lives.filter((l) => l > 0).length === 1 ? alive : []
   },
+  progress: (s, side) => (s.lives[side] > 0 ? 1000 + s.lives[side] : s.outAt[side]),
 }
 
-// ---------------------------------------------------------------- 1 to 7 (Shanghai-style)
-export const ONE_TO_SEVEN_ROUNDS = 7
+// ---------------------------------------------------------------- 1 to 7 (race)
+/** Targets are 1..7; reaching ONE_TO_SEVEN_FINISH (= "one past 7") finishes. */
+export const ONE_TO_SEVEN_LAST = 7
+export const ONE_TO_SEVEN_FINISH = ONE_TO_SEVEN_LAST + 1
+
+/**
+ * Where a hit on your current target takes you. You advance by the multiplier
+ * (single 1, double 2, triple 3). Landing exactly one past 7 finishes. If the hit would
+ * take you past that, you bounce: overshoot by 1 space = stay where you are, overshoot by
+ * 2 = drop back one space (i.e. new = current - (overshoot - 1)).
+ *   on 7: S → finish, D → stay on 7, T → back to 6
+ *   on 6: S → 7, D → finish, T → stay on 6
+ */
+export function oneToSevenMove(current: number, mult: number): number {
+  const next = current + mult
+  if (next <= ONE_TO_SEVEN_FINISH) return next
+  const overshoot = next - ONE_TO_SEVEN_FINISH
+  return current - (overshoot - 1)
+}
+
 export interface OneToSevenState {
   kind: 'oneToSeven'
-  scores: number[]
-  rounds: number[]
+  /** Current target per side, 1..7; ONE_TO_SEVEN_FINISH when finished. */
+  target: number[]
 }
 
 export const oneToSeven: Engine<OneToSevenState> = {
-  init: (cfg) => ({
-    kind: 'oneToSeven',
-    scores: cfg.sides.map(() => 0),
-    rounds: cfg.sides.map(() => 0),
-  }),
+  init: (cfg) => ({ kind: 'oneToSeven', target: cfg.sides.map(() => 1) }),
   startTurn() {},
   dart(s, side, dart) {
-    const round = s.rounds[side] + 1
-    if (dart.segment !== round) return {}
-    const pts = round * dart.mult
-    s.scores[side] += pts
-    return { points: pts }
+    const t = s.target[side]
+    if (t >= ONE_TO_SEVEN_FINISH || dart.segment !== t) return {}
+    const next = oneToSevenMove(t, dart.mult)
+    s.target[side] = next
+    const note =
+      next >= ONE_TO_SEVEN_FINISH
+        ? 'Finished'
+        : next < t
+          ? `Bounced back to ${next}`
+          : next === t
+            ? `Stays on ${t}`
+            : undefined
+    return { points: next - t, note }
   },
-  endTurn(s, side) {
-    s.rounds[side]++
-  },
-  eliminated: (s, side) => s.rounds[side] >= ONE_TO_SEVEN_ROUNDS,
-  result(s) {
-    if (s.rounds.every((r) => r >= ONE_TO_SEVEN_ROUNDS)) {
-      const max = Math.max(...s.scores)
-      return { finished: true, winners: s.scores.map((v, i) => (v === max ? i : -1)).filter((i) => i >= 0) }
-    }
-    return NO_RESULT
-  },
+  endTurn() {},
+  eliminated: () => false,
+  winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.target[i] >= ONE_TO_SEVEN_FINISH),
+  progress: (s, side) => s.target[side],
 }
 
 // ---------------------------------------------------------------- Cricket
@@ -176,15 +198,6 @@ export interface CricketState {
   kind: 'cricket'
   marks: number[][] // side -> per CRICKET_TARGETS index
   points: number[]
-}
-
-function cricketWinner(s: CricketState): number {
-  for (let i = 0; i < s.points.length; i++) {
-    const closedAll = s.marks[i].every((m) => m >= 3)
-    const others = s.points.filter((_, j) => j !== i)
-    if (closedAll && others.every((p) => s.points[i] >= p)) return i
-  }
-  return -1
 }
 
 export const cricket: Engine<CricketState> = {
@@ -207,10 +220,13 @@ export const cricket: Engine<CricketState> = {
   },
   endTurn() {},
   eliminated: () => false,
-  result(s) {
-    const w = cricketWinner(s)
-    return w >= 0 ? { finished: true, winners: [w] } : NO_RESULT
+  winnersAmong(s, _cfg, pool) {
+    // Closed everything with at least as many points as everyone still in the pool.
+    return pool.filter(
+      (i) => s.marks[i].every((m) => m >= 3) && pool.every((j) => j === i || s.points[i] >= s.points[j]),
+    )
   },
+  progress: (s, side) => s.marks[side].reduce((a, m) => a + Math.min(3, m), 0) * 10000 + s.points[side],
 }
 
 // ---------------------------------------------------------------- Around the Clock
@@ -234,10 +250,8 @@ export const atc: Engine<AtcState> = {
   },
   endTurn() {},
   eliminated: () => false,
-  result(s) {
-    const w = s.target.findIndex((t) => t === 0)
-    return w >= 0 ? { finished: true, winners: [w] } : NO_RESULT
-  },
+  winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.target[i] === 0),
+  progress: (s, side) => (s.target[side] === 0 ? 22 : s.target[side] === 25 ? 21 : s.target[side]),
 }
 
 // ---------------------------------------------------------------- Close Out (no-score closing race)
@@ -309,10 +323,8 @@ export const closeOut: Engine<CloseOutState> = {
   },
   endTurn() {},
   eliminated: () => false,
-  result(s) {
-    const w = s.marks.findIndex((m) => m.every((x) => x >= CLOSE_OUT_MARKS))
-    return w >= 0 ? { finished: true, winners: [w] } : NO_RESULT
-  },
+  winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.marks[i].every((x) => x >= CLOSE_OUT_MARKS)),
+  progress: (s, side) => s.marks[side].reduce((a, m) => a + Math.min(CLOSE_OUT_MARKS, m), 0),
 }
 
 export type GameState = X01State | KillerState | OneToSevenState | CricketState | CloseOutState | AtcState

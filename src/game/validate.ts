@@ -2,7 +2,17 @@
 // so an old or corrupt save can never crash the app.
 import { ENGINES } from './engines'
 import { replay } from './engine'
-import { DEFAULT_OPTIONS, type Action, type GameConfig, type GameOptions, type Player, type Side } from './types'
+import type { GameRecord } from './history'
+import {
+  DEFAULT_OPTIONS,
+  FRIEND_COLORS,
+  type Action,
+  type Friend,
+  type GameConfig,
+  type GameOptions,
+  type Player,
+  type Side,
+} from './types'
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStr = (v: unknown): v is string => typeof v === 'string'
@@ -36,7 +46,7 @@ export function validAction(v: unknown): v is Action {
   if (!isObj(v)) return false
   if (v.t === 'dart') return validDart(v.dart) && (v.to === undefined || v.to === 'number' || v.to === 'ring')
   if (v.t === 'total') return isInt(v.n, 0, 180)
-  return v.t === 'end'
+  return v.t === 'end' || v.t === 'continue' || v.t === 'stop'
 }
 
 function normaliseOptions(v: unknown): GameOptions | null {
@@ -76,7 +86,7 @@ export function validateConfig(v: unknown): GameConfig | null {
 }
 
 /** Returns a safe {config, actions} pair or null. Replays the game to be certain it runs. */
-export function validateSavedGame(v: unknown): { config: GameConfig; actions: Action[] } | null {
+export function validateSavedGame(v: unknown): { id?: string; config: GameConfig; actions: Action[] } | null {
   if (!isObj(v)) return null
   const config = validateConfig(v.config)
   if (!config || !Array.isArray(v.actions) || v.actions.length > 5000 || !v.actions.every(validAction)) return null
@@ -87,7 +97,7 @@ export function validateSavedGame(v: unknown): { config: GameConfig; actions: Ac
   } catch {
     return null
   }
-  return { config, actions }
+  return isStr(v.id) && v.id ? { id: v.id, config, actions } : { config, actions }
 }
 
 export interface RosterData {
@@ -104,4 +114,50 @@ export function validateRoster(v: unknown): RosterData | null {
   const teamOf: Record<string, number> = {}
   if (isObj(v.teamOf)) for (const [k, n] of Object.entries(v.teamOf)) if (isInt(n, 0, 3)) teamOf[k] = n
   return { players, teamsOn: v.teamsOn === true, teamCount, teamOf }
+}
+
+const isColor = (v: unknown): v is string => isStr(v) && /^#[0-9a-f]{3,8}$/i.test(v)
+
+export function validateFriends(v: unknown): Friend[] | null {
+  if (!Array.isArray(v)) return null
+  const seen = new Set<string>()
+  const out: Friend[] = []
+  for (const f of v) {
+    if (!validPlayer(f) || seen.has(f.id)) continue
+    seen.add(f.id)
+    const c = (f as { color?: unknown }).color
+    out.push({
+      id: f.id,
+      name: f.name.slice(0, 40),
+      color: isColor(c) ? c : FRIEND_COLORS[out.length % FRIEND_COLORS.length],
+    })
+  }
+  return out.slice(0, 200)
+}
+
+const STATS_KEYS = new Set(['501', '301', 'x01', 'killer', 'oneToSeven', 'cricket', 'closeOut', 'atc'])
+
+export function validRecord(v: unknown): v is GameRecord {
+  if (!isObj(v) || !isStr(v.id) || typeof v.endedAt !== 'number' || !Number.isFinite(v.endedAt)) return false
+  if (!isStr(v.type) || !Object.prototype.hasOwnProperty.call(ENGINES, v.type) || !STATS_KEYS.has(v.key as string))
+    return false
+  if (!Array.isArray(v.sides) || v.sides.length === 0) return false
+  const n = v.sides.length
+  if (!v.sides.every((s) => isObj(s) && isStr(s.name) && Array.isArray(s.playerIds) && s.playerIds.every(isStr)))
+    return false
+  if (!Array.isArray(v.players) || !v.players.every(validPlayer)) return false
+  if (!Array.isArray(v.places) || v.places.length !== n || !v.places.every((p) => isInt(p, 1, n))) return false
+  if (!Array.isArray(v.finishDarts) || v.finishDarts.length !== n) return false
+  if (!v.finishDarts.every((d) => d === null || isInt(d, 1, 10000))) return false
+  if (v.x01 !== undefined) {
+    if (!isObj(v.x01)) return false
+    for (const e of Object.values(v.x01))
+      if (!isObj(e) || !isInt(e.darts, 0, 100000) || !isInt(e.points, 0, 1000000)) return false
+  }
+  return typeof v.runnerUp === 'boolean'
+}
+
+export function validateHistory(v: unknown): GameRecord[] | null {
+  if (!Array.isArray(v)) return null
+  return v.filter(validRecord)
 }

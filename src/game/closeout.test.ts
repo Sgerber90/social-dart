@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { replay, applyAction, undo } from './engine'
-import {
-  CLOSE_OUT_TARGETS,
-  closeOutClosed,
-  closeOutOpenOptions,
-  closeOutOptions,
-  type CloseOutState,
-} from './engines'
+import { CLOSE_OUT_TARGETS, closeOutClosed, closeOutOpenOptions, closeOutOptions, type CloseOutState } from './engines'
 import { cfg, darts, end, parse } from './testutil'
 import type { Action, DartChoice } from './types'
 import { validAction } from './validate'
@@ -17,8 +11,10 @@ const c2 = () => cfg('closeOut', 2)
 const st = (a: Action[], c = c2()) => replay(c, a).state as CloseOutState
 /** dart with an explicit choice: 'T20>ring' or 'T20>number' */
 const ch = (code: string, to: DartChoice): Action => ({ t: 'dart', dart: parse(code), to })
-const opts = (code: string) => closeOutOptions(parse(code)).map((o) => `${o.to}:${CLOSE_OUT_TARGETS[o.target]}+${o.marks}`)
-const marks = (s: CloseOutState, side = 0) => Object.fromEntries(CLOSE_OUT_TARGETS.map((t, i) => [String(t), s.marks[side][i]]))
+const opts = (code: string) =>
+  closeOutOptions(parse(code)).map((o) => `${o.to}:${CLOSE_OUT_TARGETS[o.target]}+${o.marks}`)
+const marks = (s: CloseOutState, side = 0) =>
+  Object.fromEntries(CLOSE_OUT_TARGETS.map((t, i) => [String(t), s.marks[side][i]]))
 
 describe('Close Out: where a dart can count', () => {
   it('triple on 15-20: 3 on the number OR 1 on Triples', () => {
@@ -66,7 +62,9 @@ describe('Close Out: each dart counts once', () => {
   it('a dart whose options are all closed does nothing', () => {
     const s = st([ch('D1', 'ring'), ch('D2', 'ring'), ch('D3', 'ring'), end, ch('D4', 'ring')])
     expect(marks(s).D).toBe(3)
-    expect(replay(c2(), [ch('D1', 'ring'), ch('D2', 'ring'), ch('D3', 'ring'), end, end, ch('D4', 'ring')]).turns[2].points).toBe(0)
+    expect(
+      replay(c2(), [ch('D1', 'ring'), ch('D2', 'ring'), ch('D3', 'ring'), end, end, ch('D4', 'ring')]).turns[2].points,
+    ).toBe(0)
   })
   it('marks are capped at 3 and history counts only marks that landed', () => {
     const v = replay(c2(), darts('D20 D20'))
@@ -92,10 +90,18 @@ describe('Close Out: game flow', () => {
 
   it('first side to close all nine wins immediately, mid-turn', () => {
     const a: Action[] = [
-      ...darts('T20 T19 T18'), ...darts('M M M'),
-      ...darts('T17 T16 T15'), ...darts('M M M'),
-      ch('D1', 'ring'), ch('D2', 'ring'), ch('D3', 'ring'), ...darts('M M M'),
-      ch('T1', 'ring'), ch('T2', 'ring'), ch('T3', 'ring'), ...darts('M M M'),
+      ...darts('T20 T19 T18'),
+      ...darts('M M M'),
+      ...darts('T17 T16 T15'),
+      ...darts('M M M'),
+      ch('D1', 'ring'),
+      ch('D2', 'ring'),
+      ch('D3', 'ring'),
+      ...darts('M M M'),
+      ch('T1', 'ring'),
+      ch('T2', 'ring'),
+      ch('T3', 'ring'),
+      ...darts('M M M'),
       ...darts('BULL 25'),
     ]
     const v = replay(c2(), a)
@@ -106,7 +112,12 @@ describe('Close Out: game flow', () => {
   })
 
   it('is not won with eight of nine closed', () => {
-    const a: Action[] = [...darts('T20 T19 T18 M M M T17 T16 T15 M M M'), ch('D1', 'ring'), ch('D2', 'ring'), ch('D3', 'ring')]
+    const a: Action[] = [
+      ...darts('T20 T19 T18 M M M T17 T16 T15 M M M'),
+      ch('D1', 'ring'),
+      ch('D2', 'ring'),
+      ch('D3', 'ring'),
+    ]
     expect(replay(c2(), a).finished).toBe(false)
   })
 

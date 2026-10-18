@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Button, Card, SectionTitle, Toggle, cx } from './ui'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Avatar, Button, Card, HandicapTag, SectionTitle, Toggle, cx } from './ui'
 import Dartboard from './Dartboard'
 import type { Dart } from '../game/types'
-import { GAME_CHOICES, assignKillerNumbers, type GameChoice } from '../game/meta'
-import { DEFAULT_OPTIONS, type GameConfig, type Player, type Side } from '../game/types'
+import { GAME_CHOICES, ONE_TO_SEVEN_RULES, assignKillerNumbers, type GameChoice } from '../game/meta'
+import { HANDICAP, type HandicapInfo } from '../game/history'
+import { DEFAULT_OPTIONS, FRIEND_COLORS, type Friend, type GameConfig, type Player, type Side } from '../game/types'
 import { loadRoster, saveRoster, uid } from '../storage'
 
 const ART: Record<GameChoice, (d: Dart) => boolean> = {
@@ -20,12 +21,17 @@ const TEAM_NAMES = ['Team A', 'Team B', 'Team C', 'Team D']
 const TEAM_COLORS = ['bg-sky-500', 'bg-amber-500', 'bg-fuchsia-500', 'bg-lime-500']
 
 interface Props {
+  header: ReactNode
+  nav: ReactNode
+  friends: Friend[]
+  setFriends: (f: Friend[]) => void
+  handicaps: Map<string, HandicapInfo>
   initial?: GameConfig | null
   onStart: (cfg: GameConfig) => void
   onResume?: () => void
 }
 
-export default function Setup({ initial, onStart, onResume }: Props) {
+export default function Setup({ header, nav, friends, setFriends, handicaps, initial, onStart, onResume }: Props) {
   const roster = useMemo(() => loadRoster(), [])
   const [choice, setChoice] = useState<GameChoice>(() => {
     if (!initial) return '501'
@@ -34,14 +40,19 @@ export default function Setup({ initial, onStart, onResume }: Props) {
   })
   const [doubleOut, setDoubleOut] = useState(initial?.options.doubleOut ?? true)
   const [lives, setLives] = useState(initial?.options.lives ?? 3)
-  const [players, setPlayers] = useState<Player[]>(
-    roster?.players?.length
-      ? roster.players
-      : [
-          { id: uid(), name: 'Player 1' },
-          { id: uid(), name: 'Player 2' },
-        ],
-  )
+  const [selected, setSelected] = useState<string[]>(() => {
+    const ids = new Set(friends.map((f) => f.id))
+    return (roster?.players ?? []).map((p) => p.id).filter((id) => ids.has(id))
+  })
+  const players: Player[] = useMemo(() => {
+    const byId = new Map(friends.map((f) => [f.id, f]))
+    return selected.flatMap((id) => {
+      const f = byId.get(id)
+      return f ? [{ id: f.id, name: f.name }] : []
+    })
+  }, [selected, friends])
+  const friendOf = (id: string) => friends.find((f) => f.id === id)
+  const hcp = (id: string) => handicaps.get(id)?.handicap ?? HANDICAP.start
   const [teamsOn, setTeamsOn] = useState(roster?.teamsOn ?? false)
   const [teamCount, setTeamCount] = useState(roster?.teamCount ?? 2)
   const [teamOf, setTeamOf] = useState<Record<string, number>>(roster?.teamOf ?? {})
@@ -63,29 +74,53 @@ export default function Setup({ initial, onStart, onResume }: Props) {
 
   const sideKey = sides.map((s) => s.id).join(',')
   useEffect(() => {
-    setKillerNums((cur) => assignKillerNumbers(sides.map((s) => s.id), cur))
+    setKillerNums((cur) =>
+      assignKillerNumbers(
+        sides.map((s) => s.id),
+        cur,
+      ),
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sideKey])
 
-  const addPlayer = () => {
-    const n = name.trim() || `Player ${players.length + 1}`
-    setPlayers([...players, { id: uid(), name: n }])
+  const addNew = () => {
+    const n = name.trim().slice(0, 40)
+    if (!n) return
+    const existing = friends.find((f) => f.name.trim().toLowerCase() === n.toLowerCase())
+    if (existing) {
+      if (!selected.includes(existing.id)) setSelected([...selected, existing.id])
+    } else {
+      const f: Friend = { id: uid(), name: n, color: FRIEND_COLORS[friends.length % FRIEND_COLORS.length] }
+      setFriends([...friends, f])
+      setSelected([...selected, f.id])
+    }
     setName('')
   }
-  const removePlayer = (id: string) => setPlayers(players.filter((p) => p.id !== id))
-  const renamePlayer = (id: string, n: string) => setPlayers(players.map((p) => (p.id === id ? { ...p, name: n } : p)))
+  const toggle = (id: string) =>
+    setSelected(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir
-    if (j < 0 || j >= players.length) return
-    const next = [...players]
+    if (j < 0 || j >= selected.length) return
+    const next = [...selected]
     ;[next[i], next[j]] = [next[j], next[i]]
-    setPlayers(next)
+    setSelected(next)
   }
-  const shuffle = () => setPlayers([...players].sort(() => Math.random() - 0.5))
+  const shuffle = () => setSelected([...selected].sort(() => Math.random() - 0.5))
+  /** Balanced teams: snake draft by handicap (best first). */
+  const autoSplit = () => {
+    const order = [...selected].sort((a, b) => hcp(a) - hcp(b) || Math.random() - 0.5)
+    const t: Record<string, number> = {}
+    order.forEach((id, k) => {
+      const round = Math.floor(k / teamCount)
+      const pos = k % teamCount
+      t[id] = round % 2 === 0 ? pos : teamCount - 1 - pos
+    })
+    setTeamOf(t)
+  }
+  const bench = friends.filter((f) => !selected.includes(f.id))
 
   const minSides = choice === 'killer' ? 2 : 1
-  const killerDupes =
-    choice === 'killer' && new Set(sides.map((s) => killerNums[s.id])).size !== sides.length
+  const killerDupes = choice === 'killer' && new Set(sides.map((s) => killerNums[s.id])).size !== sides.length
   const canStart = sides.length >= minSides && !killerDupes
 
   const start = () => {
@@ -106,13 +141,8 @@ export default function Setup({ initial, onStart, onResume }: Props) {
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 pb-36 pt-6">
-      <header className="flex items-center gap-3">
-        <Logo className="h-14 w-14 drop-shadow-[0_6px_18px_rgb(212_166_64/0.35)]" />
-        <div>
-          <h1 className="text-metal text-3xl font-black tracking-tight">Social Dart</h1>
-          <p className="text-sm text-cream/60">No sign-ups. Pick a game, add players, throw.</p>
-        </div>
-      </header>
+      {header}
+      {nav}
 
       {onResume && (
         <Button variant="soft" className="min-h-14 w-full justify-between" onClick={onResume}>
@@ -143,7 +173,12 @@ export default function Setup({ initial, onStart, onResume }: Props) {
                   choice === g.id ? 'opacity-100' : 'opacity-75',
                 )}
               >
-                <Dartboard art numbers={false} emphasize={ART[g.id]} className={choice === g.id ? 'anim-spin-slow' : ''} />
+                <Dartboard
+                  art
+                  numbers={false}
+                  emphasize={ART[g.id]}
+                  className={choice === g.id ? 'anim-spin-slow' : ''}
+                />
               </span>
               <span className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-panel via-panel/75 to-transparent" />
               {g.casual && (
@@ -152,7 +187,13 @@ export default function Setup({ initial, onStart, onResume }: Props) {
                 </span>
               )}
               <span className="relative flex w-full items-center gap-2">
-                <span className={cx(g.title.length > 8 ? 'text-xl' : 'text-2xl', 'font-black leading-tight tracking-tight', choice === g.id ? 'text-metal' : 'text-cream')}>
+                <span
+                  className={cx(
+                    g.title.length > 8 ? 'text-xl' : 'text-2xl',
+                    'font-black leading-tight tracking-tight',
+                    choice === g.id ? 'text-metal' : 'text-cream',
+                  )}
+                >
                   {g.title}
                 </span>
               </span>
@@ -189,7 +230,14 @@ export default function Setup({ initial, onStart, onResume }: Props) {
               <span className="text-sm text-cream/65">Killer numbers</span>
               <Button
                 className="min-h-10 text-sm"
-                onClick={() => setKillerNums(assignKillerNumbers(sides.map((s) => s.id), {}))}
+                onClick={() =>
+                  setKillerNums(
+                    assignKillerNumbers(
+                      sides.map((s) => s.id),
+                      {},
+                    ),
+                  )
+                }
               >
                 Randomise
               </Button>
@@ -213,6 +261,19 @@ export default function Setup({ initial, onStart, onResume }: Props) {
               ))}
             </div>
             {killerDupes && <p className="mt-3 text-sm text-rose-300">Each side needs a different number.</p>}
+          </Card>
+        </section>
+      )}
+
+      {choice === 'oneToSeven' && (
+        <section>
+          <SectionTitle>Rules</SectionTitle>
+          <Card className="p-4">
+            <ul className="flex list-disc flex-col gap-1.5 pl-4 text-sm leading-snug text-cream/75">
+              {ONE_TO_SEVEN_RULES.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
           </Card>
         </section>
       )}
@@ -241,18 +302,23 @@ export default function Setup({ initial, onStart, onResume }: Props) {
                   type="button"
                   aria-label="Move down"
                   className="h-6 w-8 text-cream/45 disabled:opacity-20"
-                  disabled={i === players.length - 1}
+                  disabled={i === selected.length - 1}
                   onClick={() => move(i, 1)}
                 >
                   ▼
                 </button>
               </div>
-              <input
-                value={p.name}
-                onChange={(e) => renamePlayer(p.id, e.target.value)}
-                className="min-h-11 min-w-0 flex-1 rounded-xl bg-transparent px-2 text-lg outline-none focus:bg-white/5"
-                aria-label="Player name"
-              />
+              <Avatar name={p.name} color={friendOf(p.id)?.color} />
+              <div className="flex min-w-0 flex-1 flex-col px-1">
+                <span className="truncate text-lg leading-tight">{p.name}</span>
+                <span className="text-[11px]">
+                  <HandicapTag
+                    h={hcp(p.id)}
+                    last={handicaps.get(p.id)?.last}
+                    provisional={handicaps.get(p.id)?.provisional ?? true}
+                  />
+                </span>
+              </div>
               {teamsOn && (
                 <div className="flex gap-1">
                   {TEAM_NAMES.slice(0, teamCount).map((t, ti) => {
@@ -276,8 +342,8 @@ export default function Setup({ initial, onStart, onResume }: Props) {
               )}
               <button
                 type="button"
-                aria-label={`Remove ${p.name}`}
-                onClick={() => removePlayer(p.id)}
+                aria-label={`Take ${p.name} out of this game`}
+                onClick={() => toggle(p.id)}
                 className="h-11 w-11 rounded-xl text-xl text-cream/45 hover:bg-dred/15 hover:text-rose-300"
               >
                 ×
@@ -285,20 +351,49 @@ export default function Setup({ initial, onStart, onResume }: Props) {
             </li>
           ))}
         </ul>
+        {players.length === 0 && (
+          <p className="rounded-2xl bg-white/5 px-4 py-3 text-sm text-cream/60 ring-1 ring-white/10">
+            {friends.length
+              ? 'Tap friends below to add them to this game.'
+              : 'Add your first player below — they are saved on this device.'}
+          </p>
+        )}
+        {bench.length > 0 && (
+          <div>
+            <p className="px-1 pb-1.5 text-xs text-cream/45">Quick add</p>
+            <div className="flex flex-wrap gap-2" aria-label="Quick add from your players">
+              {bench.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => toggle(f.id)}
+                  className="press anim-pop inline-flex min-h-11 items-center gap-2 rounded-full bg-white/5 py-1 pl-1 pr-3 ring-1 ring-white/15 hover:bg-white/10"
+                >
+                  <Avatar name={f.name} color={f.color} size="sm" />
+                  <span className="font-semibold">{f.name}</span>
+                  <span className="text-[11px] tabular-nums text-cream/45">{hcp(f.id).toFixed(1)}</span>
+                  <span className="text-gold">+</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <form
           className="flex gap-2"
           onSubmit={(e) => {
             e.preventDefault()
-            addPlayer()
+            addNew()
           }}
         >
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Add player…"
+            placeholder="New player…"
+            maxLength={40}
+            aria-label="New player name"
             className="min-h-14 min-w-0 flex-1 rounded-2xl bg-white/5 px-4 text-lg outline-none ring-1 ring-white/10 placeholder:text-cream/45 focus:ring-gold"
           />
-          <Button type="submit" variant="soft" className="min-h-14 w-20">
+          <Button type="submit" variant="soft" className="min-h-14 w-20" disabled={!name.trim()}>
             Add
           </Button>
         </form>
@@ -324,9 +419,14 @@ export default function Setup({ initial, onStart, onResume }: Props) {
           </div>
         )}
         {teamsOn && (
-          <p className="px-1 text-xs text-cream/45">
-            Teams share one score; team members take turns in the order listed.
-          </p>
+          <div className="flex items-center justify-between gap-3 px-1">
+            <p className="text-xs text-cream/45">
+              Tap A/B/C/D on a player to move them. Teams share one score; members take turns in the order listed.
+            </p>
+            <Button className="min-h-10 shrink-0 text-sm" onClick={autoSplit} disabled={players.length < 2}>
+              Auto-split
+            </Button>
+          </div>
         )}
       </section>
 

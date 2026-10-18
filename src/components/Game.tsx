@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { applyAction, replay, undo } from '../game/engine'
+import { applyAction, placeOf, replay, undo } from '../game/engine'
 import { suggestCheckout, isCheckoutPossible } from '../game/checkout'
 import {
   CLOSE_OUT_MARKS,
@@ -9,10 +9,10 @@ import {
   closeOutOpenOptions,
   closeOutTargetName,
   type CloseOutOption,
-  ONE_TO_SEVEN_ROUNDS,
+  ONE_TO_SEVEN_FINISH,
   x01Average,
 } from '../game/engines'
-import { dartLabelFor, gameTitle, playerName, sideLabel } from '../game/meta'
+import { dartLabelFor, gameTitle, placeText, playerName, sideLabel } from '../game/meta'
 import { dartLabel, type Action, type Dart, type DartChoice, type GameConfig } from '../game/types'
 import DartPad from './DartPad'
 import Dartboard from './Dartboard'
@@ -51,7 +51,7 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
     setActions(next)
     const nv = replay(cfg, next)
     const last = nv.turns[nv.turns.length - 1]
-    if (nv.finished) haptic('success')
+    if (nv.finished && !view.finished) haptic('success')
     else if (last?.bust) haptic('error')
     else if (a.t === 'dart' && a.dart.mult > 1) haptic('medium')
     else haptic('light')
@@ -97,9 +97,10 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
     const route = suggestCheckout(rem, dartsLeft, cfg.options.doubleOut)
     hint = route ? `Checkout: ${route.map(dartLabel).join(' · ')}` : null
   } else if (s.kind === 'oneToSeven') {
-    const round = Math.min(s.rounds[view.side] + 1, ONE_TO_SEVEN_ROUNDS)
-    hint = `Round ${round} of ${ONE_TO_SEVEN_ROUNDS} — aim for ${round}`
-    highlight = (n) => n === round
+    const t = s.target[view.side]
+    const need = ONE_TO_SEVEN_FINISH - t
+    hint = `Aim for ${t}${need <= 3 ? ` · ${['single', 'double', 'triple'][need - 1]} finishes` : ''}`
+    highlight = (n) => n === t
   } else if (s.kind === 'atc') {
     const t = s.target[view.side]
     hint = `Aim for ${t === 25 ? 'the bull' : t}`
@@ -271,27 +272,47 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
       {view.finished && (
         <Modal>
           <div className="text-center">
-            <Confetti />
-            <div className="mx-auto w-24 anim-pop">
-              <Logo className="h-24 w-24 anim-spin-slow" />
+            {!view.continued && <Confetti />}
+            <div className="mx-auto w-20 anim-pop">
+              <Logo className="h-20 w-20 anim-spin-slow" />
             </div>
             <p className="mt-3 text-xs uppercase tracking-[0.2em] text-gold">
-              {view.winners.length > 1 ? 'Draw' : 'Winner'}
+              {view.final && view.continued ? 'Final standings' : view.winners.length > 1 ? 'Draw' : 'Winner'}
             </p>
             <h2 className="mt-1 text-3xl font-black">
               {view.winners.map((w) => sideLabel(cfg, cfg.sides[w])).join(' & ') || 'No winner'}
             </h2>
             <WinnerStats cfg={cfg} view={view} />
           </div>
-          <div className="mt-6 flex flex-col gap-2">
-            <Button variant="primary" className="min-h-14 text-lg" onClick={onRematch}>
-              Rematch
-            </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Button onClick={() => setActions(undo(actions))}>↶ Undo last</Button>
-              <Button onClick={onNewGame}>New game</Button>
+          {view.awaitingContinue ? (
+            <div className="mt-5 flex flex-col gap-2">
+              <p className="text-center text-base font-semibold">Continue for runner-up spots?</p>
+              <p className="-mt-1 text-center text-xs text-cream/50">
+                {cfg.sides.length - view.placings.flat().length} still in · placed players sit out
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="primary" className="min-h-14 text-lg" onClick={() => dispatch({ t: 'continue' })}>
+                  Yes, play on
+                </Button>
+                <Button className="min-h-14" onClick={() => dispatch({ t: 'stop' })}>
+                  No, finish
+                </Button>
+              </div>
+              <Button variant="ghost" onClick={() => setActions(undo(actions))}>
+                ↶ Undo last dart
+              </Button>
             </div>
-          </div>
+          ) : (
+            <div className="mt-6 flex flex-col gap-2">
+              <Button variant="primary" className="min-h-14 text-lg" onClick={onRematch}>
+                Rematch
+              </Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={() => setActions(undo(actions))}>↶ Undo last</Button>
+                <Button onClick={onNewGame}>New game</Button>
+              </div>
+            </div>
+          )}
         </Modal>
       )}
     </div>
@@ -435,22 +456,29 @@ function Confetti() {
 
 function WinnerStats({ cfg, view }: { cfg: GameConfig; view: ReturnType<typeof replay> }) {
   const s = view.state
+  const places = placeOf(view.placings, cfg.sides.length)
   const rows = cfg.sides.map((sd, i) => {
     let stat = ''
-    if (s.kind === 'x01') stat = `avg ${x01Average(s, i).toFixed(1)} · ${s.remaining[i]} left`
-    if (s.kind === 'oneToSeven') stat = `${s.scores[i]} pts`
+    const fd = view.finishDarts[i]
+    if (s.kind === 'x01')
+      stat = fd
+        ? `${fd} darts · avg ${x01Average(s, i).toFixed(1)}`
+        : `avg ${x01Average(s, i).toFixed(1)} · ${s.remaining[i]} left`
+    if (s.kind === 'oneToSeven') stat = s.target[i] >= ONE_TO_SEVEN_FINISH ? 'finished' : `on ${s.target[i]}`
     if (s.kind === 'cricket') stat = `${s.points[i]} pts`
     if (s.kind === 'closeOut') stat = `${closeOutClosed(s, i)}/${CLOSE_OUT_TARGETS.length} closed`
     if (s.kind === 'killer') stat = s.lives[i] > 0 ? `${s.lives[i]} ♥ left` : 'out'
     if (s.kind === 'atc') stat = s.target[i] === 0 ? 'finished' : `on ${s.target[i] === 25 ? 'bull' : s.target[i]}`
-    return { name: sideLabel(cfg, sd), stat, win: view.winners.includes(i) }
+    return { i, name: sideLabel(cfg, sd), stat, place: places[i] }
   })
+  rows.sort((a, b) => (a.place ?? 99) - (b.place ?? 99) || a.i - b.i)
   const turns = view.turns.filter((t) => t.complete).length
   return (
     <div className="mt-4 flex flex-col gap-1 text-left">
       {rows.map((r) => (
-        <div key={r.name} className="flex justify-between rounded-xl bg-white/5 px-3 py-2 text-sm">
-          <span className={r.win ? 'font-bold text-gold' : ''}>{r.name}</span>
+        <div key={r.i} className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-sm">
+          <span className="w-7 shrink-0 text-center">{r.place ? placeText(r.place) : '·'}</span>
+          <span className={cx('flex-1 truncate', r.place === 1 && 'font-bold text-gold')}>{r.name}</span>
           <span className="text-cream/65">{r.stat}</span>
         </div>
       ))}
