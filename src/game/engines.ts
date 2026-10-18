@@ -25,9 +25,16 @@ export interface Engine<S> {
   winnersAmong(s: S, cfg: GameConfig, pool: number[]): number[]
   /** How far a side got (higher = better). Ranks sides that never finished. */
   progress(s: S, side: number): number
+  /**
+   * How far a side got as a fraction 0..1 (1 = finished). Margin of victory between two
+   * sides is the difference of their fractions.
+   */
+  fraction(s: S, side: number, cfg: GameConfig): number
   /** Darts thrown by a side so far (X01 darts-to-finish). */
   dartsThrown?(s: S, side: number): number
 }
+
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x))
 
 // ---------------------------------------------------------------- X01
 export interface X01State {
@@ -81,6 +88,8 @@ export const x01: Engine<X01State> = {
   eliminated: () => false,
   winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.remaining[i] === 0),
   progress: (s, side) => -s.remaining[side],
+  // share of the start score already scored
+  fraction: (s, side, cfg) => clamp01((cfg.options.startScore - s.remaining[side]) / cfg.options.startScore),
   dartsThrown: (s, side) => s.darts[side],
 }
 
@@ -140,6 +149,11 @@ export const killer: Engine<KillerState> = {
     return alive.length === 1 && s.lives.length > 1 && s.lives.filter((l) => l > 0).length === 1 ? alive : []
   },
   progress: (s, side) => (s.lives[side] > 0 ? 1000 + s.lives[side] : s.outAt[side]),
+  // alive: 0.5 + 0.5 × lives left; out: 0 (first out) up to just under 0.5 (last out)
+  fraction: (s, side, cfg) =>
+    s.lives[side] > 0
+      ? 0.5 + 0.5 * clamp01(s.lives[side] / Math.max(1, cfg.options.lives))
+      : (0.5 * (s.outAt[side] - 1)) / Math.max(1, s.lives.length - 1),
 }
 
 // ---------------------------------------------------------------- 1 to 7 (race)
@@ -190,6 +204,8 @@ export const oneToSeven: Engine<OneToSevenState> = {
   eliminated: () => false,
   winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.target[i] >= ONE_TO_SEVEN_FINISH),
   progress: (s, side) => s.target[side],
+  // targets 1..7 passed
+  fraction: (s, side) => clamp01((s.target[side] - 1) / ONE_TO_SEVEN_LAST),
 }
 
 // ---------------------------------------------------------------- Cricket
@@ -227,6 +243,8 @@ export const cricket: Engine<CricketState> = {
     )
   },
   progress: (s, side) => s.marks[side].reduce((a, m) => a + Math.min(3, m), 0) * 10000 + s.points[side],
+  // marks made toward closing everything
+  fraction: (s, side) => s.marks[side].reduce((a, m) => a + Math.min(3, m), 0) / (CRICKET_TARGETS.length * 3),
 }
 
 // ---------------------------------------------------------------- Around the Clock
@@ -252,6 +270,8 @@ export const atc: Engine<AtcState> = {
   eliminated: () => false,
   winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.target[i] === 0),
   progress: (s, side) => (s.target[side] === 0 ? 22 : s.target[side] === 25 ? 21 : s.target[side]),
+  // 21 steps: 1..20 and bull
+  fraction: (s, side) => ((s.target[side] === 0 ? 22 : s.target[side] === 25 ? 21 : s.target[side]) - 1) / 21,
 }
 
 // ---------------------------------------------------------------- Close Out (no-score closing race)
@@ -325,6 +345,8 @@ export const closeOut: Engine<CloseOutState> = {
   eliminated: () => false,
   winnersAmong: (s, _cfg, pool) => pool.filter((i) => s.marks[i].every((x) => x >= CLOSE_OUT_MARKS)),
   progress: (s, side) => s.marks[side].reduce((a, m) => a + Math.min(CLOSE_OUT_MARKS, m), 0),
+  fraction: (s, side) =>
+    s.marks[side].reduce((a, m) => a + Math.min(CLOSE_OUT_MARKS, m), 0) / (CLOSE_OUT_TARGETS.length * CLOSE_OUT_MARKS),
 }
 
 export type GameState = X01State | KillerState | OneToSevenState | CricketState | CloseOutState | AtcState

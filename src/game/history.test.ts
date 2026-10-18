@@ -7,6 +7,7 @@ import {
   computeHandicaps,
   computeStats,
   expectedVs,
+  headToHead,
   placementScore,
   rankPlayers,
   threeDartAvg,
@@ -16,6 +17,7 @@ import {
 import { cfg, darts, total } from './testutil'
 
 let t = 0
+const round = (x: number) => Math.round(x * 100) / 100
 function rec(places: number[], ids?: string[][], extra: Partial<GameRecord> = {}): GameRecord {
   const sides = (ids ?? places.map((_, i) => [`p${i}`])).map((p, i) => ({ name: `S${i}`, playerIds: p }))
   return {
@@ -41,59 +43,154 @@ describe('placement score', () => {
   })
 })
 
+/** 2-player record where side 0 beat side 1 by `m` (progress difference). */
+const duel = (m: number, winner = 0) => {
+  const places = winner === 0 ? [1, 2] : [2, 1]
+  const mm = winner === 0 ? m : -m
+  return rec(places, undefined, {
+    margins: [
+      [0, mm],
+      [-mm, 0],
+    ],
+  })
+}
+/** n established, equal players (each has played 5 games that cancel out). */
+const tie = () =>
+  rec([1, 1], undefined, {
+    margins: [
+      [0, 0],
+      [0, 0],
+    ],
+  })
+const warmup = () => [tie(), tie(), tie(), tie(), tie()]
+
 describe('handicap', () => {
-  it('starts at 18; equal 2-player game: provisional win -2, loss +1', () => {
-    const h = computeHandicaps([rec([1, 2])])
-    expect(h.get('p0')).toMatchObject({ handicap: 16, last: -2, games: 1, provisional: true })
-    expect(h.get('p1')).toMatchObject({ handicap: 19, last: 1 })
+  it('head-to-head result: placing gives direction, margin gives size', () => {
+    expect(headToHead(1, 0)).toBeCloseTo(0.65)
+    expect(headToHead(1, 1)).toBeCloseTo(1)
+    expect(headToHead(-1, -0.04)).toBeCloseTo(0.336)
+    expect(headToHead(-1, -1)).toBeCloseTo(0)
+    expect(headToHead(0, 0)).toBe(0.5)
+    // a winner with lower measured progress (e.g. Cricket on points) still counts as a narrow win
+    expect(headToHead(1, -0.3)).toBeCloseTo(0.5 + 0.5 * (0.3 + 0.7 * 0.3))
   })
 
-  it('established players: win -1, loss +0.5', () => {
-    const rs = Array.from({ length: 5 }, (_, i) => rec(i % 2 ? [2, 1] : [1, 2]))
-    const before = computeHandicaps(rs)
-    const a = before.get('p0')!
-    const b = before.get('p1')!
-    expect(a.provisional).toBe(false)
-    // nudge both to equal for the check: use two fresh established players by symmetry
-    const after = computeHandicaps([...rs, rec([1, 2])])
-    const d0 = after.get('p0')!.handicap - a.handicap
-    const d1 = after.get('p1')!.handicap - b.handicap
-    expect(d0).toBeLessThan(0)
-    expect(d0).toBeGreaterThanOrEqual(-2)
-    expect(d1).toBeGreaterThan(0)
-    expect(d1).toBeLessThanOrEqual(1)
+  it('narrow vs big wins (equal players, established K=2)', () => {
+    const narrow = computeHandicaps([
+      rec([1, 2], [['a'], ['b']], {
+        margins: [
+          [0, 0.04],
+          [-0.04, 0],
+        ],
+      }),
+    ])
+    expect(narrow.get('a')!.last).toBeCloseTo(-0.7) // provisional: K=4 → -4 × 0.164
+    const h = (m: number) => {
+      const base = computeHandicaps(warmup())
+      const after = computeHandicaps([...warmup(), duel(m)])
+      return round(after.get('p0')!.handicap - base.get('p0')!.handicap)
+    }
+    expect(h(0.04)).toBeCloseTo(-0.3, 1)
+    expect(h(0.6)).toBeCloseTo(-0.7, 1)
+    expect(h(1)).toBeCloseTo(-1, 1)
+    expect(h(0.04)).toBeGreaterThan(h(0.6))
+  })
+
+  it('narrow vs big losses: a narrow loss barely moves you, a hammering clearly does', () => {
+    const h = (m: number) => {
+      const base = computeHandicaps(warmup())
+      const after = computeHandicaps([...warmup(), duel(m)])
+      return round(after.get('p1')!.handicap - base.get('p1')!.handicap)
+    }
+    expect(h(0.04)).toBeCloseTo(0.2, 1)
+    expect(h(0.6)).toBeCloseTo(0.4, 1)
+    expect(h(1)).toBeCloseTo(0.5, 1)
+    expect(h(0.04)).toBeLessThan(h(1))
+  })
+
+  it('can go below scratch (negative), bounded at -10', () => {
+    // a scratch player hammering a strong (2.0) opponent goes negative
+    const win = rec([1, 2], [['star'], ['pro']], {
+      margins: [
+        [0, 1],
+        [-1, 0],
+      ],
+    })
+    const start = new Map([
+      ['star', 0],
+      ['pro', 2],
+    ])
+    const h = computeHandicaps([win], start).get('star')!
+    expect(h.handicap).toBeLessThan(0)
+    expect(h.last).toBeLessThan(0)
+    const many = Array.from({ length: 50 }, () => ({ ...win, id: `w${++t}`, endedAt: t }))
+    const end = computeHandicaps(
+      many,
+      new Map([
+        ['star', -9],
+        ['pro', -8],
+      ]),
+    )
+    expect(end.get('star')!.handicap).toBe(-10)
+    // and the old 0 floor is gone for ordinary history too
+    const streak = Array.from({ length: 30 }, (_, k) =>
+      rec([1, 2], [['ace'], [k % 2 ? 'b' : 'c']], {
+        margins: [
+          [0, 1],
+          [-1, 0],
+        ],
+      }),
+    )
+    const pros = computeHandicaps(
+      streak,
+      new Map([
+        ['b', 0],
+        ['c', 0],
+      ]),
+    )
+    expect(pros.get('ace')!.handicap).toBeLessThan(0)
   })
 
   it('beating a stronger field moves you more than beating a weaker one', () => {
     expect(expectedVs(18, 18)).toBe(0.5)
     expect(expectedVs(24, 12)).toBeCloseTo(1 / 11)
-    // p0 beats p1 five times → p1 rises, p0 drops
-    const warm = Array.from({ length: 5 }, () => rec([1, 2]))
+    const warm = Array.from({ length: 5 }, () => duel(0.5))
     const h = computeHandicaps(warm)
     expect(h.get('p0')!.handicap).toBeLessThan(h.get('p1')!.handicap)
-    // upset: weaker p1 wins now
-    const up = computeHandicaps([...warm, rec([2, 1])])
-    const fav = computeHandicaps([...warm, rec([1, 2])])
+    const up = computeHandicaps([...warm, duel(0.5, 1)])
+    const fav = computeHandicaps([...warm, duel(0.5)])
     const upsetGain = h.get('p1')!.handicap - up.get('p1')!.handicap
     const favGain = h.get('p0')!.handicap - fav.get('p0')!.handicap
     expect(upsetGain).toBeGreaterThan(favGain)
     expect(upsetGain).toBeLessThanOrEqual(2)
   })
 
-  it('mid placings are scaled, and nobody moves in a solo game', () => {
-    const h = computeHandicaps([rec([1, 2, 3, 4])])
-    expect(h.get('p0')!.last).toBeCloseTo(-2)
-    expect(h.get('p1')!.last).toBeCloseTo(-0.7)
-    expect(h.get('p2')!.last).toBeCloseTo(0.3)
-    expect(h.get('p3')!.last).toBeCloseTo(1)
+  it('multi-player: averaged over opponents; nobody moves in a solo game', () => {
+    const m = [
+      [0, 0.2, 0.5, 0.9],
+      [-0.2, 0, 0.3, 0.7],
+      [-0.5, -0.3, 0, 0.4],
+      [-0.9, -0.7, -0.4, 0],
+    ]
+    const h = computeHandicaps([rec([1, 2, 3, 4], undefined, { margins: m })])
+    const d = [0, 1, 2, 3].map((i) => h.get(`p${i}`)!.last)
+    expect(d[0]).toBeLessThan(d[1])
+    expect(d[1]).toBeLessThan(0)
+    expect(d[2]).toBeGreaterThan(0)
+    expect(d[3]).toBeGreaterThan(d[2])
     expect(computeHandicaps([rec([1])]).get('p0')!.handicap).toBe(18)
   })
 
-  it('is clamped 0..36, deterministic and order-independent of the input array', () => {
-    const rs = Array.from({ length: 40 }, () => rec([1, 2]))
+  it('old records without margins use a medium margin', () => {
+    const h = computeHandicaps([rec([1, 2])])
+    // provisional K=4, head-to-head 0.5 + 0.5 × (0.3 + 0.7 × 0.5) = 0.825
+    expect(h.get('p0')!.last).toBeCloseTo(-1.3)
+    expect(h.get('p1')!.last).toBeCloseTo(0.7)
+  })
+
+  it('is deterministic and independent of the input order', () => {
+    const rs = Array.from({ length: 40 }, (_, k) => duel((k % 10) / 10, k % 3 ? 0 : 1))
     const h = computeHandicaps(rs)
-    expect(h.get('p0')!.handicap).toBeGreaterThanOrEqual(0)
-    expect(h.get('p1')!.handicap).toBeLessThanOrEqual(36)
     expect(computeHandicaps([...rs].reverse())).toEqual(h)
   })
 
@@ -105,11 +202,52 @@ describe('handicap', () => {
           ['a', 'b'],
           ['c', 'd'],
         ],
+        {
+          margins: [
+            [0, 0.5],
+            [-0.5, 0],
+          ],
+        },
       ),
     ])
-    expect(h.get('a')!.handicap).toBe(16)
-    expect(h.get('b')!.handicap).toBe(16)
-    expect(h.get('d')!.handicap).toBe(19)
+    expect(h.get('a')!.handicap).toBe(h.get('b')!.handicap)
+    expect(h.get('c')!.handicap).toBe(h.get('d')!.handicap)
+    expect(h.get('a')!.handicap).toBeLessThan(18)
+  })
+})
+
+describe('margins from real games', () => {
+  it('X01: margin = share of the start score; measured when the winner finished', () => {
+    const c = cfg('x01', 3, { startScore: 101 })
+    const r = buildRecord(
+      'm',
+      c,
+      replay(c, [...darts('T20 S1 D20'), { t: 'continue' }, total(60), total(41), ...darts('S1 D20')]),
+      1,
+    )!
+    // at p0's finish: p1 101 left (0), p2 101 left (0) → margin 1
+    expect(r.margins![0][1]).toBe(1)
+    expect(r.margins![0][2]).toBe(1)
+    // p1 vs p2 measured when p1 finished: p1 1.0, p2 41/101
+    expect(r.margins![1][2]).toBeCloseTo(1 - 41 / 101, 2)
+    expect(r.margins![2][1]).toBeCloseTo(-(1 - 41 / 101), 2)
+  })
+
+  it('narrow X01 win gives a small margin', () => {
+    const c = cfg('x01', 2, { startScore: 101 })
+    const r = buildRecord('n', c, replay(c, [total(61), total(81), ...darts('D20')]), 1)!
+    expect(r.margins![0][1]).toBeCloseTo(1 - 81 / 101, 2)
+    const r2 = buildRecord('n2', c, replay(c, [total(61), total(99), ...darts('D20')]), 1)!
+    expect(r2.margins![0][1]).toBeCloseTo(1 - 99 / 101, 2)
+  })
+
+  it('other games report a 0..1 fraction', () => {
+    const c7 = cfg('oneToSeven', 2)
+    const r7 = buildRecord('a', c7, replay(c7, darts('T1 T4 S7')), 1)!
+    expect(r7.margins![0][1]).toBe(1) // opponent still on 1
+    const ck = cfg('killer', 2, { lives: 3, killerNumbers: { s0: 20, s1: 19 } })
+    const rk = buildRecord('k', ck, replay(ck, darts('D20 D19 D19 M M M D19')), 1)!
+    expect(rk.margins![0][1]).toBe(1) // won with all 3 lives vs first out
   })
 })
 

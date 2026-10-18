@@ -24,6 +24,8 @@ export interface GameView {
   winners: number[]
   /** Darts each side had thrown when it finished (X01), else null. */
   finishDarts: (number | null)[]
+  /** Every side's progress fraction (0..1) at the moment each placings group was decided. */
+  snapshots: number[][]
 }
 
 export function getEngine(cfg: GameConfig): Engine<GameState> {
@@ -50,6 +52,8 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
   const placings: number[][] = []
   const placed = new Set<number>()
   const finishDarts: (number | null)[] = cfg.sides.map(() => null)
+  const snapshots: number[][] = []
+  const snap = () => cfg.sides.map((_, i) => Math.round(engine.fraction(s, i, cfg) * 1000) / 1000)
   let side = 0
   let open: TurnRecord | null = null
   let final = false
@@ -90,6 +94,7 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
       }
       g.forEach((i) => placed.add(i))
       placings.push(g)
+      snapshots.push(snap())
       k += g.length
     }
     final = true
@@ -114,6 +119,7 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
       if (engine.dartsThrown) finishDarts[i] = engine.dartsThrown(s, i)
     })
     placings.push(w)
+    snapshots.push(snap())
     if (w.includes(t.side)) {
       t.place = place
       t.win = place === 1
@@ -188,7 +194,25 @@ export function replay(cfg: GameConfig, actions: Action[]): GameView {
     placings,
     winners: placings[0] ?? [],
     finishDarts,
+    snapshots,
   }
+}
+
+/**
+ * Margin between two sides: progress difference measured when the first of them was placed
+ * (so runner-up play afterwards doesn't shrink the winner's margin). Range -1..1.
+ */
+export function marginMatrix(view: Pick<GameView, 'placings' | 'snapshots'>, sides: number): number[][] {
+  const group: number[] = Array.from({ length: sides }, () => -1)
+  view.placings.forEach((g, k) => g.forEach((i) => (group[i] = k)))
+  return Array.from({ length: sides }, (_, i) =>
+    Array.from({ length: sides }, (_, j) => {
+      if (i === j || group[i] < 0 || group[j] < 0) return 0
+      const snapRow = view.snapshots[Math.min(group[i], group[j])]
+      if (!snapRow) return 0
+      return Math.round((snapRow[i] - snapRow[j]) * 1000) / 1000
+    }),
+  )
 }
 
 /** Append an action if it is valid for the current position; otherwise return the list unchanged. */

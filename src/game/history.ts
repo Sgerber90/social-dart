@@ -1,7 +1,7 @@
 // Finished-game history, per-player stats and the golf-style handicap.
 // Pure and deterministic: everything is derived from the list of GameRecords, so the
 // same history (e.g. synced for tournaments later) always gives the same numbers.
-import { placeOf, type GameView } from './engine'
+import { marginMatrix, placeOf, type GameView } from './engine'
 import type { GameConfig, GameType } from './types'
 
 /** Stats bucket: X01 is split by start score. */
@@ -33,6 +33,11 @@ export interface GameRecord {
   x01?: Record<string, { darts: number; points: number }>
   /** Runner-up spots were played out. */
   runnerUp: boolean
+  /**
+   * margins[i][j] = how far side i was ahead of side j (progress difference, -1..1), measured
+   * when the first of the two was placed. Missing on games recorded before margins existed.
+   */
+  margins?: number[][]
 }
 
 export function statsKeyOf(cfg: GameConfig): StatsKey {
@@ -65,6 +70,7 @@ export function buildRecord(id: string, cfg: GameConfig, view: GameView, endedAt
     finishDarts: cfg.type === 'x01' ? view.finishDarts : cfg.sides.map(() => null),
     x01,
     runnerUp: view.continued,
+    margins: marginMatrix(view, cfg.sides.length),
   }
 }
 
@@ -81,7 +87,8 @@ export function placementScore(places: number[], side: number): number {
 // ------------------------------------------------------------------ handicap
 export const HANDICAP = {
   start: 18,
-  min: 0,
+  /** better than scratch is allowed (golf "plus" handicaps) */
+  min: -10,
   max: 36,
   /** handicap gap that makes the better player ~10× as likely to finish ahead */
   scale: 12,
@@ -92,11 +99,27 @@ export const HANDICAP = {
   provisionalK: 4,
   /** rises (worse results than expected) are dampened */
   riseFactor: 0.5,
+  /** share of a head-to-head result that comes from placing alone; the rest is the margin */
+  placingWeight: 0.3,
+  /** margin assumed for games recorded before margins were stored */
+  legacyMargin: 0.5,
 }
 
 /** Chance that a player with handicap `h` finishes ahead of one with `opp` (lower = better). */
 export function expectedVs(h: number, opp: number): number {
   return 1 / (1 + Math.pow(10, (h - opp) / HANDICAP.scale))
+}
+
+/**
+ * Head-to-head result 0..1 against one opponent. Placing decides the direction (ahead = above
+ * 0.5, behind = below, tie = margin only); the margin decides how far:
+ * a win scores 0.7 (photo finish) up to 1 (opponent hasn't started); a loss 0.3 down to 0.
+ */
+export function headToHead(placeDiff: number, margin: number): number {
+  const w = HANDICAP.placingWeight
+  const m = Math.min(1, Math.max(-1, margin))
+  const strength = placeDiff === 0 ? (1 - w) * m : Math.sign(placeDiff) * (w + (1 - w) * Math.abs(m))
+  return 0.5 + 0.5 * strength
 }
 
 export interface HandicapInfo {
@@ -111,13 +134,35 @@ export interface HandicapInfo {
 const round1 = (x: number) => Math.round(x * 10) / 10
 const clampH = (x: number) => Math.min(HANDICAP.max, Math.max(HANDICAP.min, x))
 
-/** Replay the history (oldest first) and return each player's current handicap. */
-export function computeHandicaps(records: GameRecord[]): Map<string, HandicapInfo> {
+/** One game's handicap change for side `i` given everyone's handicaps before the game. */
+export function handicapDelta(r: GameRecord, sideH: number[], i: number, k: number): number {
+  const n = r.sides.length
+  if (n < 2) return 0
+  let actual = 0
+  let expected = 0
+  for (let j = 0; j < n; j++) {
+    if (j === i) continue
+    const placeDiff = r.places[j] - r.places[i] // > 0: i finished ahead
+    const margin = r.margins?.[i]?.[j] ?? Math.sign(placeDiff) * HANDICAP.legacyMargin
+    actual += headToHead(placeDiff, margin)
+    expected += expectedVs(sideH[i], sideH[j])
+  }
+  let d = (-k * (actual - expected)) / (n - 1)
+  if (d > 0) d *= HANDICAP.riseFactor
+  return d
+}
+
+/**
+ * Replay the history (oldest first) and return each player's current handicap.
+ * `start` optionally seeds known handicaps (e.g. imported for a tournament); others start at 18.
+ */
+export function computeHandicaps(records: GameRecord[], start?: Map<string, number>): Map<string, HandicapInfo> {
   const info = new Map<string, HandicapInfo>()
   const get = (id: string) => {
     let i = info.get(id)
     if (!i) {
-      i = { handicap: HANDICAP.start, games: 0, last: 0, provisional: true, trend: [HANDICAP.start] }
+      const h0 = clampH(start?.get(id) ?? HANDICAP.start)
+      i = { handicap: h0, games: 0, last: 0, provisional: true, trend: [h0] }
       info.set(id, i)
     }
     return i
@@ -126,26 +171,23 @@ export function computeHandicaps(records: GameRecord[]): Map<string, HandicapInf
     const sideH = r.sides.map(
       (s) => s.playerIds.reduce((a, id) => a + get(id).handicap, 0) / Math.max(1, s.playerIds.length),
     )
-    const deltas = r.sides.map((_, i) => {
-      if (r.sides.length < 2) return 0
-      const others = sideH.filter((_, j) => j !== i)
-      const expected = others.reduce((a, o) => a + expectedVs(sideH[i], o), 0) / others.length
-      const actual = placementScore(r.places, i)
-      return actual - expected
-    })
-    r.sides.forEach((s, i) => {
-      for (const id of s.playerIds) {
+    const changes = r.sides.map((s) =>
+      s.playerIds.map((id) => {
         const p = get(id)
-        const k = p.games < HANDICAP.provisionalGames ? HANDICAP.provisionalK : HANDICAP.k
-        let d = -k * deltas[i]
-        if (d > 0) d *= HANDICAP.riseFactor
+        return p.games < HANDICAP.provisionalGames ? HANDICAP.provisionalK : HANDICAP.k
+      }),
+    )
+    r.sides.forEach((s, i) => {
+      s.playerIds.forEach((id, m) => {
+        const p = get(id)
+        const d = handicapDelta(r, sideH, i, changes[i][m])
         const before = p.handicap
         p.handicap = clampH(round1(before + d))
         p.last = round1(p.handicap - before)
         p.games++
         p.provisional = p.games < HANDICAP.provisionalGames
         p.trend.push(p.handicap)
-      }
+      })
     })
   }
   return info

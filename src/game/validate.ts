@@ -154,6 +154,16 @@ export function validRecord(v: unknown): v is GameRecord {
     for (const e of Object.values(v.x01))
       if (!isObj(e) || !isInt(e.darts, 0, 100000) || !isInt(e.points, 0, 1000000)) return false
   }
+  if (v.margins !== undefined) {
+    if (!Array.isArray(v.margins) || v.margins.length !== n) return false
+    for (const row of v.margins)
+      if (
+        !Array.isArray(row) ||
+        row.length !== n ||
+        !row.every((m) => typeof m === 'number' && Number.isFinite(m) && m >= -1 && m <= 1)
+      )
+        return false
+  }
   return typeof v.runnerUp === 'boolean'
 }
 

@@ -157,14 +157,23 @@ export default function Stats({ header, nav, friends, history, handicaps }: Prop
         <SectionTitle>How the handicap works</SectionTitle>
         <Card className="p-4 text-sm leading-relaxed text-cream/75">
           <p>
-            Like golf: lower is better, 0 is scratch, range {HANDICAP.min}–{HANDICAP.max}. Everyone starts on{' '}
-            {HANDICAP.start}.
+            Like golf: lower is better and 0 is scratch. Really good players can go below scratch, down to{' '}
+            {HANDICAP.min}. The highest is {HANDICAP.max}. Everyone starts on {HANDICAP.start}.
           </p>
           <p className="mt-2">
-            After each finished game we compare where you placed with where your handicap said you should place against
-            that field. Finishing above expectation lowers it (up to −{HANDICAP.k} per game, −{HANDICAP.provisionalK}{' '}
-            for your first {HANDICAP.provisionalGames} games, marked *); finishing below raises it by half as much.
-            Beating a stronger field counts more than beating a weaker one. Teams share the team result.
+            After each finished game, you are compared with every opponent: did you finish ahead, and{' '}
+            <b className="text-cream">by how much</b>? The margin is how far each of you got when the first of you
+            finished, e.g. the share of 501 already scored, targets closed, numbers passed or lives left. A photo finish
+            counts as a narrow win, and winning before they&apos;ve really started counts as a full one.
+          </p>
+          <p className="mt-2">
+            That result is set against what your handicaps predicted. Beating a stronger player, or winning by more,
+            lowers your handicap more (up to −{HANDICAP.k} a game, or −{HANDICAP.provisionalK} in your first{' '}
+            {HANDICAP.provisionalGames} games, marked *). Losing raises it by half as much: a narrow loss barely moves
+            you, a hammering clearly does. Teams share the team result.
+          </p>
+          <p className="mt-2 text-xs text-gold/80">
+            New: the winning and losing margin now counts. Thanks for the idea!
           </p>
         </Card>
       </section>

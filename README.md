@@ -25,12 +25,14 @@ A fast, mobile-first darts scorer with a real tap-the-board input. No sign-ups, 
 - **Runner-up spots**: once someone wins, if two or more sides are still in, the app asks *Continue for runner-up spots?* **Yes** keeps playing without the placed sides until only one is left. **No** ranks the rest by progress, such as remaining score, marks, target or lives. Killer ranks everyone by when they were knocked out. Every side gets a final place, and tied progress shares a place.
 - **History**: every finished game is saved as a record (`social-dart:history`, newest 1,000) with its placings, players, darts to finish and X01 darts/points. If you undo a finish, the record is removed. All stats and handicaps are worked out from this list, so it can later be synced for tournaments.
 - **Stats**: games, wins, win %, placings, average place, per-game breakdown and, for 301/501, 3-dart average plus best and average darts to finish. The ranking orders players by average placing score (1st = 100%, last = 0%, ties averaged), then wins, then games played. You can filter it by game type.
-- **Handicap** (golf-style: lower is better, 0 = scratch, range 0–36, start 18). After each game, games replayed oldest first:
-  - side handicap = average of its players
-  - expected = average over opponents of `1 / (1 + 10^((mine − theirs) / 12))`
-  - actual = `(N − place) / (N − 1)`, ties averaged (1 = won, 0 = last)
-  - change = `−K × (actual − expected)`, K = 4 for a player's first 5 games (provisional, shown with *), then 2. Rises are halved. The result is rounded to 0.1 and clamped to 0–36.
-  - Examples: an even 1-v-1 win is −1 (−2 provisional) and a loss +0.5 (+1). In an even 4-player game the places move −2/−0.7/+0.3/+1 while provisional. Beating a stronger field moves you more, up to −2 per game once established.
+- **Handicap** (golf-style: lower is better, 0 = scratch, **negative = better than scratch**, range −10 to 36, start 18). New: the **winning or losing margin counts**, as a friend suggested. History is replayed oldest first, so every handicap is recalculated with the current formula:
+  - **Progress** (0..1) per side: X01 = share of the start score scored; Cricket and Close Out = share of all marks made; Around the Clock and 1 to 7 = share of the sequence done; Killer = 0.5 + 0.5 × lives left if alive, or 0 (first out) up to just under 0.5 (last out) if knocked out.
+  - **Margin** vs each opponent = my progress − theirs, measured when the first of the two finished (so runner-up play doesn't shrink the winner's margin).
+  - **Head-to-head result** = 0.5 + 0.5 × s, where s = ±(0.3 + 0.7 × |margin|). The sign comes from the placing (ahead +, behind −); a tie uses s = 0.7 × margin. So a win scores 0.65 (photo finish) up to 1 (whitewash), and a loss 0.35 down to 0.
+  - **Expected** vs each opponent = `1 / (1 + 10^((mine − theirs) / 12))`.
+  - **Change** = −K × average over opponents of (result − expected). K = 4 for a player's first 5 games (provisional, shown with *), then 2. Increases are halved. Round to 0.1 and clamp to −10…36. Team players use the team's average handicap and share its result.
+  - Games recorded before margins existed count as a medium margin (0.5).
+  - Examples (established players, both on 18): win 501 with the opponent on 20 left → −0.3 / +0.2; win with them on 301 left → −0.7 / +0.4; win before they score → −1 / +0.5.
 
 ## Stack
 
