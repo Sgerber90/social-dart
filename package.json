@@ -10,14 +10,17 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "icons": "esbuild scripts/icon-board.tsx --bundle --platform=node --format=cjs --jsx=automatic --outfile=node_modules/.tmp/icon-board.cjs && node node_modules/.tmp/icon-board.cjs && node scripts/render-icons.mjs"
+    "icons": "esbuild scripts/icon-board.tsx --bundle --platform=node --format=cjs --jsx=automatic --outfile=node_modules/.tmp/icon-board.cjs && node node_modules/.tmp/icon-board.cjs && node scripts/render-icons.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-social-dart \"vitest run --config vitest.rules.config.ts\""
   },
   "dependencies": {
+    "firebase": "^13.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.25.0",
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",

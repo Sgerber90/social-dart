@@ -1,0 +1,116 @@
+rules_version = '2';
+// Social Dart. Accounts are optional; guests never touch Firestore.
+//
+// users/{uid}                 public profile (display name, linked player, handicap, stats). Owner writes.
+// users/{uid}/games/{gameId}  owner's synced game records. Owner only.
+// groups/{gid}                name, description, joinMode, ownerId, memberCount, lastMember.
+// groups/{gid}/members/{uid}  role: owner | admin | member.
+// groups/{gid}/requests/{uid} join requests for private groups.
+//
+// memberCount is kept exact: every member create/delete must be in the same batch as a
+// group update that moves memberCount by exactly 1 and names that member in lastMember.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function groupPath(gid) { return /databases/$(db)/documents/groups/$(gid); }
+    function memberPath(gid, uid) { return /databases/$(db)/documents/groups/$(gid)/members/$(uid); }
+    function requestPath(gid, uid) { return /databases/$(db)/documents/groups/$(gid)/requests/$(uid); }
+    function isMember(gid) { return signedIn() && exists(memberPath(gid, me())); }
+    function roleOf(gid) { return get(memberPath(gid, me())).data.role; }
+    function isAdmin(gid) { return isMember(gid) && roleOf(gid) in ['owner', 'admin']; }
+    function isOwner(gid) { return signedIn() && get(groupPath(gid)).data.ownerId == me(); }
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function onlyChanged(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function countMovedBy(gid, n, uid) {
+      return getAfter(groupPath(gid)).data.memberCount == get(groupPath(gid)).data.memberCount + n
+        && getAfter(groupPath(gid)).data.lastMember == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if true;
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['displayName', 'playerId', 'handicap', 'handicapLast', 'provisional', 'games', 'wins', 'updatedAt'])
+        && str(request.resource.data.displayName, 1, 40)
+        && (!('handicap' in request.resource.data) || (request.resource.data.handicap is number && request.resource.data.handicap >= -10 && request.resource.data.handicap <= 36))
+        && (!('games' in request.resource.data) || (request.resource.data.games is int && request.resource.data.games >= 0))
+        && (!('wins' in request.resource.data) || (request.resource.data.wins is int && request.resource.data.wins >= 0));
+      allow delete: if signedIn() && me() == uid;
+
+      match /games/{gameId} {
+        allow read, write: if signedIn() && me() == uid;
+      }
+    }
+
+    match /groups/{gid} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'description', 'joinMode', 'ownerId', 'memberCount', 'lastMember', 'createdAt'])
+        && request.resource.data.ownerId == me()
+        && request.resource.data.memberCount == 1
+        && request.resource.data.lastMember == me()
+        && str(request.resource.data.name, 1, 60)
+        && str(request.resource.data.description, 0, 300)
+        && request.resource.data.joinMode in ['public', 'private']
+        && getAfter(memberPath(gid, me())).data.role == 'owner';
+      allow update: if signedIn() && (
+        // owner edits details
+        (isOwner(gid) && onlyChanged(['name', 'description', 'joinMode'])
+          && str(request.resource.data.name, 1, 60) && str(request.resource.data.description, 0, 300)
+          && request.resource.data.joinMode in ['public', 'private'])
+        // member count moves with a member doc created/deleted in the same batch
+        || (onlyChanged(['memberCount', 'lastMember'])
+          && request.resource.data.memberCount == resource.data.memberCount + 1
+          && !exists(memberPath(gid, request.resource.data.lastMember))
+          && existsAfter(memberPath(gid, request.resource.data.lastMember)))
+        || (onlyChanged(['memberCount', 'lastMember'])
+          && request.resource.data.memberCount == resource.data.memberCount - 1
+          && exists(memberPath(gid, request.resource.data.lastMember))
+          && !existsAfter(memberPath(gid, request.resource.data.lastMember)))
+      );
+      allow delete: if isOwner(gid);
+
+      match /members/{uid} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['role', 'displayName', 'joinedAt'])
+          && str(request.resource.data.displayName, 1, 40)
+          && (
+            // the creator's own owner membership, written in the same batch as the new group
+            (request.resource.data.role == 'owner' && me() == uid && !exists(groupPath(gid))
+              && getAfter(groupPath(gid)).data.ownerId == me())
+            || (request.resource.data.role == 'member' && countMovedBy(gid, 1, uid) && (
+            // join a public group yourself
+            (me() == uid && get(groupPath(gid)).data.joinMode == 'public')
+            // admin approves a pending request (request removed in the same batch)
+            || (isAdmin(gid) && exists(requestPath(gid, uid)) && !existsAfter(requestPath(gid, uid)))
+            ))
+          );
+        // owner promotes/demotes admins; members may refresh their own display name
+        allow update: if signedIn() && resource.data.role != 'owner' && (
+          (isOwner(gid) && onlyChanged(['role']) && request.resource.data.role in ['admin', 'member'])
+          || (me() == uid && onlyChanged(['displayName']) && str(request.resource.data.displayName, 1, 40))
+        );
+        allow delete: if signedIn() && (
+          // owner deleting the whole group in one batch
+          (isOwner(gid) && !existsAfter(groupPath(gid)))
+          || (resource.data.role != 'owner' && countMovedBy(gid, -1, uid) && (
+            me() == uid                                                    // leave
+            || (isOwner(gid))                                              // owner removes anyone
+            || (isAdmin(gid) && resource.data.role == 'member')            // admin removes members
+          ))
+        );
+      }
+
+      match /requests/{uid} {
+        allow read: if signedIn() && (me() == uid || isAdmin(gid));
+        allow create: if signedIn() && me() == uid
+          && request.resource.data.keys().hasOnly(['displayName', 'createdAt'])
+          && str(request.resource.data.displayName, 1, 40)
+          && get(groupPath(gid)).data.joinMode == 'private'
+          && !exists(memberPath(gid, uid));
+        allow delete: if signedIn() && (me() == uid || isAdmin(gid) || (isOwner(gid) && !existsAfter(groupPath(gid))));
+      }
+    }
+  }
+}

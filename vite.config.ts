@@ -36,11 +36,18 @@ export default defineConfig({
         // index.html is NOT precached: navigations go network-first so a new deploy is
         // picked up immediately, falling back to the last cached copy when offline.
         globPatterns: ['**/*.{js,css,svg,png,webmanifest}'],
+        // the Firebase chunk (accounts/groups only) is cached on first use, not precached for guests
+        globIgnores: ['**/api-*.js'],
         navigateFallback: null,
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         runtimeCaching: [
+          {
+            urlPattern: ({ url }) => /\/assets\/api-[^/]+\.js$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: { cacheName: 'social-dart-cloud', expiration: { maxEntries: 4 } },
+          },
           {
             urlPattern: ({ request }) => request.mode === 'navigate',
             handler: 'NetworkFirst',

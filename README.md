@@ -34,6 +34,31 @@ A fast, mobile-first darts scorer with a real tap-the-board input. No sign-ups, 
   - Games recorded before margins existed count as a medium margin (0.5).
   - Examples (established players, both on 18): win 501 with the opponent on 20 left → −0.3 / +0.2; win with them on 301 left → −0.7 / +0.4; win before they score → −1 / +0.5.
 
+## Optional accounts & groups (Firebase)
+
+Guest play is unchanged: no account is needed and everything stays on the device. When the Firebase web config is set (`VITE_FIREBASE_*`, see `.env.example`), a **Sign in** button and a **Groups** tab appear. Set `VITE_ACCOUNTS=off` to hide them again. The Firebase SDK is lazy-loaded and isn't precached, so guests never download it.
+
+- **Backend:** Firebase project `social-dart-sg`, with Auth (email/password) and Firestore (`firestore.rules`). Deploy with `firebase deploy --only firestore,auth`.
+- **Accounts:** sign up, sign in, and reset your password by emailed link. On the **Profile** page you can:
+  - change your display name
+  - change your email (asks for your current password, sends a confirmation link to the new address, and switches once it's clicked)
+  - change your password (also asks for your current password)
+  - see your handicap, games and wins
+- **Linking:** pick the roster player who is you. That player's finished games upload to `users/{uid}/games`. Your handicap and stats are written to your public `users/{uid}` profile, and on a new device your synced games are merged into local history.
+- **Groups:**
+  - Anyone can see the list of groups with their member counts.
+  - A signed-in user can create a group, set to **Public** (join instantly) or **Private** (send a request).
+  - The owner or admins approve or decline requests.
+  - Members can leave.
+  - The owner can edit or delete the group, make members admins and remove members. Admins can remove ordinary members.
+  - Each group page has a leaderboard sorted by members' synced handicaps.
+- **Security rules:**
+  - Users write only their own profile and games, and emails are never stored in Firestore.
+  - Only admins can approve.
+  - The owner can't be removed.
+  - `memberCount` stays exact, because every membership change has to happen in the same batch as a ±1 count change naming that member (`lastMember`).
+- **Tests:** `npm run test:rules` runs the rules tests on the Firestore emulator (Java required).
+
 ## Stack
 
 Vite + React 19 + TypeScript + Tailwind CSS v4, vite-plugin-pwa (Workbox), and Vitest.
