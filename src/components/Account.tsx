@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import type { Account as Acc, Profile } from '../cloud/api'
 import type { CloudApi } from '../cloud/useCloud'
+import { isNativeApp } from '../platform/native'
 import { HANDICAP, computeStats, winPct, type GameRecord, type HandicapInfo } from '../game/history'
 import type { Friend } from '../game/types'
 import { Avatar, Button, Card, HandicapTag, SectionTitle, cx } from './ui'
@@ -57,6 +58,7 @@ export default function Account(p: Props) {
       ) : (
         <SignIn api={p.api} setAccount={p.setAccount} />
       )}
+      <LegalLinks />
     </div>
   )
 }
@@ -330,6 +332,86 @@ function ProfileView({
       <p className="-mt-3 px-1 text-center text-[11px] text-cream/40">
         Signing out keeps your players, games and stats on this device.
       </p>
+
+      <DeleteAccount api={api} setAccount={setAccount} />
     </>
+  )
+}
+
+export function LegalLinks() {
+  // In the native app, open in place (the pages link back); on the web, a new tab.
+  const blank = isNativeApp() ? undefined : '_blank'
+  return (
+    <p className="flex justify-center gap-4 text-xs text-cream/45">
+      <a className="underline" href="./privacy.html" target={blank} rel="noopener">
+        Privacy policy
+      </a>
+      <a className="underline" href="./support.html" target={blank} rel="noopener">
+        Support
+      </a>
+      <a className="underline" href="mailto:info@sjgenterprises.co.za">
+        info@sjgenterprises.co.za
+      </a>
+    </p>
+  )
+}
+
+function DeleteAccount({ api, setAccount }: { api: CloudApi; setAccount: (a: Acc | null) => void }) {
+  const [open, setOpen] = useState(false)
+  const [pw, setPw] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const act = useAction()
+  if (!open)
+    return (
+      <button type="button" className="min-h-11 text-sm text-rose-300 underline" onClick={() => setOpen(true)}>
+        Delete account
+      </button>
+    )
+  return (
+    <section className="flex flex-col gap-2">
+      <SectionTitle>Delete account</SectionTitle>
+      <Card className="flex flex-col gap-3 p-4 ring-1 ring-rose-400/40">
+        <p className="text-sm text-cream/70">
+          This permanently deletes your account, your public profile, your synced games, your group memberships and
+          any groups you own. It cannot be undone. Players, games and stats saved on this device stay here.
+        </p>
+        <input
+          className={input}
+          type="password"
+          autoComplete="current-password"
+          placeholder="Current password"
+          aria-label="Current password to delete account"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+        />
+        <input
+          className={input}
+          placeholder='Type DELETE to confirm'
+          aria-label="Type DELETE to confirm"
+          autoCapitalize="characters"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+        />
+        {act.view}
+        <div className="flex gap-2">
+          <Button className="flex-1" onClick={() => setOpen(false)} disabled={act.busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            className="flex-1"
+            disabled={act.busy || !pw || confirm.trim().toUpperCase() !== 'DELETE'}
+            onClick={() =>
+              act.run(async () => {
+                await api.deleteAccount(pw)
+                setAccount(null)
+              }, api)
+            }
+          >
+            {act.busy ? 'Deleting…' : 'Delete forever'}
+          </Button>
+        </div>
+      </Card>
+    </section>
   )
 }

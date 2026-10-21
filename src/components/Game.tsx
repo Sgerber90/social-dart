@@ -124,7 +124,7 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
   }
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-xl flex-col gap-3 overflow-y-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+    <div className="mx-auto flex h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-xl flex-col gap-3 overflow-y-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       <header className="flex items-center gap-2">
         <Button variant="ghost" className="w-12 px-0" aria-label="Quit game" onClick={() => setConfirmQuit(true)}>
           ✕

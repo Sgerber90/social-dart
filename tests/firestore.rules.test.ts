@@ -147,3 +147,35 @@ describe('groups', () => {
 function expectCount(n: number, want: number) {
   if (n !== want) throw new Error(`memberCount ${n}, expected ${want}`)
 }
+
+describe('account deletion', () => {
+  it('a user can remove all of their own data, nobody else can', async () => {
+    const a = as('a')
+    await setDoc(doc(a, 'users', 'a'), { displayName: 'Ann' })
+    await setDoc(doc(a, 'users', 'a', 'games', 'g1'), { endedAt: 1, json: '{}' })
+    // owner of one group, member of another, pending request in a third
+    await create(a, 'mine', 'a')
+    await create(as('b'), 'pub', 'b')
+    await join(a, 'pub', 'a')
+    await create(as('b'), 'priv', 'b', 'private')
+    await setDoc(doc(a, 'groups', 'priv', 'requests', 'a'), { displayName: 'Ann' })
+
+    // strangers can't wipe it
+    await assertFails(deleteDoc(doc(as('x'), 'users', 'a')))
+    await assertFails(deleteDoc(doc(as('x'), 'users', 'a', 'games', 'g1')))
+
+    // the deletion sequence the app runs (src/cloud/api.ts deleteAccount)
+    const del = writeBatch(a)
+    del.delete(doc(a, 'groups', 'mine', 'members', 'a'))
+    del.delete(doc(a, 'groups', 'mine'))
+    await assertSucceeds(del.commit())
+    const leave = writeBatch(a)
+    leave.delete(doc(a, 'groups', 'pub', 'members', 'a'))
+    leave.update(doc(a, 'groups', 'pub'), { memberCount: increment(-1), lastMember: 'a' })
+    await assertSucceeds(leave.commit())
+    await assertSucceeds(deleteDoc(doc(a, 'groups', 'priv', 'requests', 'a')))
+    await assertSucceeds(deleteDoc(doc(a, 'users', 'a', 'games', 'g1')))
+    await assertSucceeds(deleteDoc(doc(a, 'users', 'a')))
+    if ((await count('pub')) !== 1) throw new Error('member count drifted')
+  })
+})

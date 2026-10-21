@@ -3,7 +3,11 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import {
   EmailAuthProvider,
+  browserLocalPersistence,
   createUserWithEmailAndPassword,
+  deleteUser,
+  indexedDBLocalPersistence,
+  initializeAuth,
   getAuth,
   onAuthStateChanged,
   reauthenticateWithCredential,
@@ -29,10 +33,12 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  where,
   writeBatch,
   type Firestore,
 } from 'firebase/firestore'
 import { firebaseConfig } from './config'
+import { isNativeApp } from '../platform/native'
 import type { GameRecord } from '../game/history'
 import { validRecord } from '../game/validate'
 
@@ -42,7 +48,12 @@ let db: Firestore
 function init() {
   if (app) return
   app = initializeApp(firebaseConfig as Record<string, string>)
-  auth = getAuth(app)
+  // Inside the native iOS/Android WebView (capacitor://localhost) the default getAuth() pulls in the
+  // popup/redirect resolver, which loads an iframe from the auth domain and can hang in WKWebView.
+  // Email/password needs neither, so use initializeAuth with IndexedDB persistence there.
+  auth = isNativeApp()
+    ? initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] })
+    : getAuth(app)
   db = getFirestore(app)
 }
 
@@ -362,4 +373,42 @@ export async function deleteGroup(gid: string) {
   rs.forEach((d) => b.delete(d.ref))
   b.delete(groupRef(gid))
   await b.commit()
+}
+
+// ------------------------------------------------------------------ account deletion
+/**
+ * Permanently delete the signed-in account (App Store guideline 5.1.1(v)):
+ * synced games, public profile, group memberships and join requests, groups the user owns
+ * (with their members/requests), then the Firebase Auth user. Every step goes through the
+ * normal security rules as the user themself.
+ */
+export async function deleteAccount(currentPassword: string) {
+  const u = await reauth(currentPassword)
+  const uid = u.uid
+  // groups this user owns: delete them entirely
+  const owned = await getDocs(query(collection(db, 'groups'), where('ownerId', '==', uid)))
+  for (const g of owned.docs) await deleteGroup(g.id)
+  // memberships and pending requests in other groups
+  const all = await getDocs(collection(db, 'groups'))
+  for (const g of all.docs) {
+    if (g.data().ownerId === uid) continue
+    const [m, r] = await Promise.all([
+      getDoc(memberRef(g.id, uid)).catch(() => null),
+      getDoc(requestRef(g.id, uid)).catch(() => null),
+    ])
+    if (m?.exists()) await removeMember(g.id, uid)
+    if (r?.exists()) await cancelRequest(g.id)
+  }
+  // synced games, then the profile
+  const games = await getDocs(collection(db, 'users', uid, 'games'))
+  for (let i = 0; i < games.docs.length; i += 400) {
+    const b = writeBatch(db)
+    games.docs.slice(i, i + 400).forEach((d) => b.delete(d.ref))
+    await b.commit()
+  }
+  const b = writeBatch(db)
+  b.delete(doc(db, 'users', uid))
+  await b.commit()
+  await deleteUser(u)
+  emitCurrent()
 }

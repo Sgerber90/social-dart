@@ -120,3 +120,7 @@ Then switch `src/platform/haptics.ts` to `@capacitor/haptics` for real taptic fe
 1. **Domain (in `src/game/`)**: add a `tournament.ts` with `Tournament { format: 'knockout' | 'roundRobin' | 'league', entrants, fixtures[] }`. Each fixture holds a `GameConfig` and its `Action[]` log, and the existing `replay()` gives each fixture's winner. Bracket generation, seeding, byes and standings stay as pure functions, unit-tested like the engines.
 2. **Local first**: run a tournament on one device (pass-the-phone), stored in localStorage/IndexedDB like games.
 3. **Virtual / remote**: because games are action logs, players on different devices can each record their own legs and sync just the actions (WebRTC or a small realtime backend such as Supabase/Appwrite), optionally with anonymous share codes so there are still no accounts. The server would only replay and validate logs with the same `src/game` code.
+
+## iOS app
+
+Capacitor iOS project in `ios/` (SPM). See [docs/IOS-RELEASE.md](docs/IOS-RELEASE.md). `npm run ios:sync` then `npm run ios:open`.

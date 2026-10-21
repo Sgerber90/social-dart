@@ -5,6 +5,7 @@ import './index.css'
 import App from './App'
 import ErrorBoundary from './components/ErrorBoundary'
 import { reloadOnce } from './platform/recovery'
+import { initNative, isNativeApp } from './platform/native'
 
 declare global {
   interface Window {
@@ -26,10 +27,15 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 window.__sdBooted = true
+void initNative()
 
 // Service worker: new versions activate immediately (skipWaiting + clientsClaim) and the
 // page reloads onto them. Check for updates on start, when the app regains focus and hourly.
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// The native app serves its files from the bundle (capacitor://localhost): no service worker there,
+// and any stale registration is removed.
+if ('serviceWorker' in navigator && isNativeApp()) {
+  navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => {})
+} else if ('serviceWorker' in navigator && import.meta.env.PROD) {
   registerSW({
     immediate: true,
     onRegisteredSW(_url, reg) {

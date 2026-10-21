@@ -11,14 +11,24 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "icons": "esbuild scripts/icon-board.tsx --bundle --platform=node --format=cjs --jsx=automatic --outfile=node_modules/.tmp/icon-board.cjs && node node_modules/.tmp/icon-board.cjs && node scripts/render-icons.mjs",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-social-dart \"vitest run --config vitest.rules.config.ts\""
+    "test:rules": "firebase emulators:exec --only firestore --project demo-social-dart \"vitest run --config vitest.rules.config.ts\"",
+    "ios:assets": "python3 scripts/render-ios-assets.py",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios",
+    "ios:run": "npm run ios:sync && cap run ios"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.5.3",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
     "firebase": "^13.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@eslint/js": "^9.25.0",
     "@firebase/rules-unit-testing": "^6.0.0",
     "@tailwindcss/vite": "^4.3.3",
@@ -35,5 +45,8 @@
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
