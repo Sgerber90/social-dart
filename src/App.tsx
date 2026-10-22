@@ -39,7 +39,11 @@ export default function App() {
   const [gameId, setGameId] = useState(saved?.id ?? uid())
   const [config, setConfig] = useState<GameConfig | null>(saved?.config ?? null)
   const [actions, setActions] = useState<Action[]>(saved?.actions ?? [])
-  const [screen, setScreen] = useState<Screen>(saved ? 'game' : 'setup')
+  const [screen, setScreen] = useState<Screen>(() => {
+    if (saved) return 'game'
+    const h = window.location.hash.slice(1)
+    return TABS.some((t) => t.id === h) ? (h as Screen) : 'setup'
+  })
   const [friends, setFriends] = useState<Friend[]>(() => loadFriends())
   const [history, setHistory] = useState(() => loadHistory())
 

@@ -48,7 +48,7 @@ function useAction() {
 
 export default function Account(p: Props) {
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-16 pt-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col md:max-w-4xl md:px-8 gap-5 px-4 pb-16 pt-6">
       {p.header}
       {p.nav}
       {!p.api ? (

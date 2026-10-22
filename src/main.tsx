@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App'
+import { seedDemo } from './demo'
 import ErrorBoundary from './components/ErrorBoundary'
 import { reloadOnce } from './platform/recovery'
 import { initNative, isNativeApp } from './platform/native'
@@ -18,6 +19,8 @@ window.addEventListener('vite:preloadError', (e) => {
   e.preventDefault()
   void reloadOnce()
 })
+
+seedDemo()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

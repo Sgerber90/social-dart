@@ -39,7 +39,7 @@ export default function Stats({ header, nav, friends, history, handicaps }: Prop
   const keys = STATS_KEYS.filter((k) => k.key === 'all' || history.some((r) => r.key === k.key) || k.key === filter)
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-16 pt-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col md:max-w-4xl md:px-8 gap-5 px-4 pb-16 pt-6">
       {header}
       {nav}
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1" role="tablist" aria-label="Game type">
@@ -70,7 +70,7 @@ export default function Stats({ header, nav, friends, history, handicaps }: Prop
             it shows up here.
           </Card>
         )}
-        <ol className="flex flex-col gap-2">
+        <ol className="flex flex-col gap-2 md:grid md:grid-cols-2">
           {ranked.map((id, k) => {
             const f = byId.get(id)!
             const st = stats.get(id)!

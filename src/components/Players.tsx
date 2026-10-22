@@ -29,7 +29,7 @@ export default function Players({ header, nav, friends, setFriends, handicaps, h
     setFriends(friends.map((f) => (f.id === id ? { ...f, ...patch } : f)))
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-16 pt-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col md:max-w-4xl md:px-8 gap-5 px-4 pb-16 pt-6">
       {header}
       {nav}
       <section className="flex flex-col gap-3">
@@ -58,7 +58,7 @@ export default function Players({ header, nav, friends, setFriends, handicaps, h
             No players yet. Friends you add here show up as quick-add chips when you set up a game.
           </p>
         )}
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2 md:grid md:grid-cols-2 md:items-start">
           {friends.map((f) => {
             const h = handicaps.get(f.id)
             const st = stats.get(f.id)

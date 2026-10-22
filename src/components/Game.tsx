@@ -124,7 +124,7 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-xl flex-col gap-3 overflow-y-auto px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+    <div className="mx-auto flex h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-xl flex-col gap-3 overflow-y-auto px-3 md:max-w-3xl md:gap-4 md:px-6 lg:landscape:max-w-6xl pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       <header className="flex items-center gap-2">
         <Button variant="ghost" className="w-12 px-0" aria-label="Quit game" onClick={() => setConfirmQuit(true)}>
           ✕
@@ -135,6 +135,8 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
         </Button>
       </header>
 
+      <div className="flex flex-1 flex-col gap-3 md:gap-4 lg:landscape:min-h-0 lg:landscape:grid lg:landscape:grid-cols-2 lg:landscape:gap-6">
+      <div className="flex flex-col gap-3 md:gap-4 lg:landscape:overflow-y-auto">
       <div className={cx(bustFlash && 'anim-shake')} key={bustFlash ? `bust${view.turns.length}` : 'sb'}>
         <Scoreboard cfg={cfg} view={view} />
       </div>
@@ -163,7 +165,9 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
         <TurnDarts darts={view.openDarts} label={label} />
       </div>
 
-      <div className="mt-auto flex flex-1 flex-col justify-end gap-2">
+      </div>
+
+      <div className="mt-auto flex flex-1 flex-col justify-end gap-2 md:gap-3 lg:landscape:mt-0 lg:landscape:min-h-0">
         <div className="relative">
           {pending && s.kind === 'closeOut' && (
             <div className="absolute inset-x-0 top-0 z-20">
@@ -252,6 +256,8 @@ export default function Game({ cfg, actions, setActions, onQuit, onRematch, onNe
             {view.turnOpen ? 'End turn' : 'Skip turn'}
           </Button>
         </div>
+      </div>
+
       </div>
 
       {showHistory && <History cfg={cfg} view={view} onClose={() => setShowHistory(false)} />}

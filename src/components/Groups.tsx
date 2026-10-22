@@ -18,7 +18,7 @@ const input =
 export default function Groups({ header, nav, api, account, onSignIn }: Props) {
   const [open, setOpen] = useState<string | null>(null)
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-16 pt-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col md:max-w-4xl md:px-8 gap-5 px-4 pb-16 pt-6">
       {header}
       {nav}
       {!api ? (
@@ -126,7 +126,7 @@ function GroupList({
       {err && <p className="text-sm text-rose-300">{err}</p>}
       {groups === null && !err && <p className="text-sm text-cream/50">Loading groups…</p>}
       {groups?.length === 0 && <Card className="p-4 text-sm text-cream/60">No groups yet. Start the first one!</Card>}
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2 md:grid md:grid-cols-2">
         {groups?.map((g) => (
           <li key={g.id}>
             <button
@@ -343,7 +343,7 @@ function GroupPage({
       {isAdmin && requests.length > 0 && (
         <div>
           <SectionTitle>Join requests ({requests.length})</SectionTitle>
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-2 md:grid md:grid-cols-2">
             {requests.map((r) => (
               <li key={r.uid} className="flex items-center gap-3 rounded-2xl bg-[#1d1913] p-3 ring-1 ring-gold/40">
                 <Avatar name={r.displayName} size="sm" />
@@ -371,7 +371,7 @@ function GroupPage({
 
       <div>
         <SectionTitle>Leaderboard · by handicap</SectionTitle>
-        <ol className="flex flex-col gap-2">
+        <ol className="flex flex-col gap-2 md:grid md:grid-cols-2">
           {ranked.map((m, k) => {
             const canRemove =
               uid !== m.uid && m.role !== 'owner' && (isOwner || (myRole === 'admin' && m.role === 'member'))

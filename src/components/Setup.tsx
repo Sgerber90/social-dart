@@ -140,7 +140,7 @@ export default function Setup({ header, nav, friends, setFriends, handicaps, ini
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-6 px-4 pb-36 pt-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col md:max-w-4xl md:px-8 gap-6 px-4 pb-36 pt-6">
       {header}
       {nav}
 
@@ -153,7 +153,7 @@ export default function Setup({ header, nav, friends, setFriends, handicaps, ini
 
       <section>
         <SectionTitle>Game</SectionTitle>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           {GAME_CHOICES.map((g, i) => (
             <button
               key={g.id}
@@ -285,7 +285,7 @@ export default function Setup({ header, nav, friends, setFriends, handicaps, ini
             Shuffle order
           </button>
         </div>
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2 md:grid md:grid-cols-2">
           {players.map((p, i) => (
             <li key={p.id} className="flex items-center gap-2 rounded-2xl bg-panel/90 p-2 ring-1 ring-white/10">
               <div className="flex flex-col">
@@ -431,7 +431,7 @@ export default function Setup({ header, nav, friends, setFriends, handicaps, ini
       </section>
 
       <div className="fixed inset-x-0 bottom-0 z-10 bg-gradient-to-t from-board via-board/95 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6">
-        <div className="mx-auto max-w-xl">
+        <div className="mx-auto max-w-xl md:max-w-4xl">
           <Button variant="primary" className="min-h-16 w-full text-lg" disabled={!canStart} onClick={start}>
             {canStart
               ? `Start ${GAME_CHOICES.find((g) => g.id === choice)!.title}`
