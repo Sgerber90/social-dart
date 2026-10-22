@@ -1,7 +1,7 @@
 # Social Dart: iOS release runbook
 
 The Capacitor 8 iOS project lives in `ios/App` and uses **Swift Package Manager**, so you don't need CocoaPods.
-Bundle ID: **`za.co.sjgenterprises.socialdart`**. Version **1.0.0 (build 1)**. iPhone only, portrait only, iOS 15+.
+Bundle ID: **`za.co.sjgenterprises.socialdart`**. Version **1.0.0 (build 1)**. Universal (iPhone + iPad), iPhone portrait only, iPad all four orientations, iOS 15+. Price: **Free**, no in-app purchases.
 
 ## Only Stefan can do these
 1. **Apple Developer Program**: enrol at <https://developer.apple.com/programs/enroll/> (US$99/yr). Enrol as an **Organisation** (needs a D-U-N-S number for SJG Enterprises; this can take days) if you want "SJG Enterprises" shown as the seller, or as an **Individual** (faster) to show your own name.
@@ -32,7 +32,7 @@ Run `npm run ios:sync` again after **every** web change. The built web app (`ios
 1. In the left navigator select **App** (blue project icon), then **TARGETS → App**, then **Signing & Capabilities**.
 2. Tick **Automatically manage signing**. Set **Team** to your team.
 3. Check that **Bundle Identifier** is `za.co.sjgenterprises.socialdart`.
-4. On **General**, check Display Name **Social Dart**, Version **1.0.0**, Build **1**, iPhone only, Portrait.
+4. On **General**, check Display Name **Social Dart**, Version **1.0.0**, Build **1**, Supported Destinations iPhone + iPad; iPhone Portrait, iPad all orientations.
 
 ## 3. Run it
 - **Simulator**: pick an "iPhone 16 Pro" (or similar) next to the scheme **App**, then ⌘R.
@@ -66,7 +66,7 @@ In the app's **1.0 Prepare for Submission** page, fill in the listing below, pic
 | Subtitle (30) | **Darts scorer for pub & home** |
 | Primary category | **Sports** |
 | Secondary category | **Games → Board** (or Games → Sports) |
-| Price | Free |
+| Price | Free (price tier Free, no in-app purchases) |
 | Privacy Policy URL | https://social-dart.vercel.app/privacy |
 | Support URL | https://social-dart.vercel.app/support |
 | Marketing URL (optional) | https://social-dart.vercel.app |
@@ -124,10 +124,11 @@ Data collection: **Yes, we collect data.** Tracking: **No** (no data is used for
 Everything else: Not collected (no analytics, no crash SDK, no location, no ads). These match `ios/App/App/PrivacyInfo.xcprivacy`.
 
 ### Screenshots needed
-The app is **iPhone only**, so no iPad screenshots are required.
+The app is **universal**, so iPhone AND iPad screenshots are required.
 - **6.9" display** (required): 1320 × 2868 portrait (iPhone 16 Pro Max simulator) *or* 1290 × 2796 (iPhone 15 Pro Max). App Store Connect scales these down for smaller iPhones.
 - Optional 6.5": 1284 × 2778 or 1242 × 2688.
 - 3–10 per size, PNG or JPEG, no alpha. Suggested shots: game setup, 501 in progress with the dartboard, checkout hint, Cricket, stats/handicaps, groups.
+- **iPad 13" display** (required): 2064 × 2752 portrait (or 2752 × 2064 landscape), from the "iPad Pro 13-inch (M4)" simulator, ⌘S.
 - How: run on the "iPhone 16 Pro Max" simulator and press ⌘S (saves to the Desktop at the right size).
 
 ---
