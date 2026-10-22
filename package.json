@@ -15,9 +15,15 @@
     "ios:assets": "python3 scripts/render-ios-assets.py",
     "ios:sync": "npm run build && cap sync ios",
     "ios:open": "cap open ios",
-    "ios:run": "npm run ios:sync && cap run ios"
+    "ios:run": "npm run ios:sync && cap run ios",
+    "android:assets": "python3 scripts/render-android-assets.py",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android",
+    "android:run": "npm run android:sync && cap run android",
+    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.5.3",
@@ -28,6 +34,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.5.3",
     "@eslint/js": "^9.25.0",
     "@firebase/rules-unit-testing": "^6.0.0",
