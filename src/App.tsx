@@ -5,6 +5,8 @@ import Players from './components/Players'
 import Stats from './components/Stats'
 import Account from './components/Account'
 import Groups from './components/Groups'
+import ReviewPrompt from './components/ReviewPrompt'
+import { recordCompletedGame } from './platform/review'
 import { cloudEnabled } from './cloud/config'
 import { useCloud } from './cloud/useCloud'
 import type { Profile } from './cloud/api'
@@ -35,6 +37,16 @@ const TABS: { id: Exclude<Screen, 'game' | 'account'>; label: string }[] = [
 const syncedKey = (uid: string) => `social-dart:synced:${uid}`
 
 export default function App() {
+  const [askReview, setAskReview] = useState(false)
+  return (
+    <>
+      <Screens onAskReview={() => setAskReview(true)} />
+      {askReview && <ReviewPrompt onClose={() => setAskReview(false)} />}
+    </>
+  )
+}
+
+function Screens({ onAskReview }: { onAskReview: () => void }) {
   const [saved] = useState(() => loadGame())
   const [gameId, setGameId] = useState(saved?.id ?? uid())
   const [config, setConfig] = useState<GameConfig | null>(saved?.config ?? null)
@@ -63,6 +75,8 @@ export default function App() {
     } catch {
       return
     }
+    if (buildRecord(gameId, config, view, Date.now()) && recordCompletedGame(gameId))
+      setTimeout(onAskReview, 1500)
     setHistory((h) => {
       const prev = h.find((r) => r.id === gameId)
       const rec = buildRecord(gameId, config, view, prev?.endedAt ?? Date.now())
@@ -70,7 +84,7 @@ export default function App() {
       if (prev && JSON.stringify(prev) === JSON.stringify(rec)) return h
       return upsertRecord(h, rec)
     })
-  }, [gameId, config, actions])
+  }, [gameId, config, actions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handicaps = useMemo(() => computeHandicaps(history), [history])
 

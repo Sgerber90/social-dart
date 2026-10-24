@@ -1,6 +1,6 @@
 # Android release (Google Play)
 
-Capacitor 8 Android project in `android/` · package `za.co.sjgenterprises.socialdart` · versionCode 1 / versionName 1.0.0 · minSdk 24 (Capacitor default) · targetSdk/compileSdk 36.
+Capacitor 8 Android project in `android/` · package `za.co.sjgenterprises.socialdart` · versionCode 2 / versionName 1.0.1 · minSdk 24 (Capacitor default) · targetSdk/compileSdk 36.
 
 ## Toolchain
 - Node ≥ 22, JDK 21, Android SDK (platform 36, build-tools). On the box: `JAVA_HOME=~/jdk`, `ANDROID_HOME=~/android-sdk`, node 22 at `~/node-v22.21.0-linux-x64/bin`.
