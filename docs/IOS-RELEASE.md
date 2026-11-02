@@ -1,7 +1,7 @@
 # Social Dart: iOS release runbook
 
 The Capacitor 8 iOS project lives in `ios/App` and uses **Swift Package Manager**, so you don't need CocoaPods.
-Bundle ID: **`za.co.sjgenterprises.socialdart`**. Version **1.0.1 (build 3)**. Universal (iPhone + iPad), iPhone portrait only, iPad all four orientations, iOS 15+. Price: **Free**, no in-app purchases.
+Bundle ID: **`za.co.sjgenterprises.socialdart`**. Version **1.0.1 (build 4)**. Universal (iPhone + iPad), iPhone portrait only, iPad all four orientations, iOS 15+. Price: **Free**, no in-app purchases.
 
 ## Only Stefan can do these
 1. **Apple Developer Program**: enrol at <https://developer.apple.com/programs/enroll/> (US$99/yr). Enrol as an **Organisation** (needs a D-U-N-S number for SJG Enterprises; this can take days) if you want "SJG Enterprises" shown as the seller, or as an **Individual** (faster) to show your own name.

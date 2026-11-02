@@ -6,6 +6,10 @@ rules_version = '2';
 // groups/{gid}                name, description, joinMode, ownerId, memberCount, lastMember.
 // groups/{gid}/members/{uid}  role: owner | admin | member.
 // groups/{gid}/requests/{uid} join requests for private groups.
+// groups/{gid}/bans/{uid}     people an owner/admin removed; they can't rejoin or re-request until the owner lifts it.
+// users/{uid}/blocks/{other}  users that {uid} has blocked (owner only). Hides {other} from {uid}'s view.
+// users/{uid}/blockedBy/{b}   written by blocker b when b blocks {uid}, so {uid}'s client can hide b too. Only {uid} reads it.
+// reports/{id}                UGC reports (App Store 1.2). Create-only for signed-in users; read in the Firebase console / Admin SDK.
 //
 // memberCount is kept exact: every member create/delete must be in the same batch as a
 // group update that moves memberCount by exactly 1 and names that member in lastMember.
@@ -19,6 +23,8 @@ service cloud.firestore {
     function isMember(gid) { return signedIn() && exists(memberPath(gid, me())); }
     function roleOf(gid) { return get(memberPath(gid, me())).data.role; }
     function isAdmin(gid) { return isMember(gid) && roleOf(gid) in ['owner', 'admin']; }
+    function banPath(gid, uid) { return /databases/$(db)/documents/groups/$(gid)/bans/$(uid); }
+    function blockPath(blocker, other) { return /databases/$(db)/documents/users/$(blocker)/blocks/$(other); }
     function isOwner(gid) { return signedIn() && get(groupPath(gid)).data.ownerId == me(); }
     function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
     function onlyChanged(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
@@ -28,9 +34,10 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if true;
+      // a user you blocked you can't read your profile (guests are unaffected)
+      allow read: if !signedIn() || !exists(blockPath(uid, me()));
       allow create, update: if signedIn() && me() == uid
-        && request.resource.data.keys().hasOnly(['displayName', 'playerId', 'handicap', 'handicapLast', 'provisional', 'games', 'wins', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['displayName', 'playerId', 'handicap', 'handicapLast', 'provisional', 'games', 'wins', 'updatedAt', 'termsAcceptedAt', 'termsVersion'])
         && str(request.resource.data.displayName, 1, 40)
         && (!('handicap' in request.resource.data) || (request.resource.data.handicap is number && request.resource.data.handicap >= -10 && request.resource.data.handicap <= 36))
         && (!('games' in request.resource.data) || (request.resource.data.games is int && request.resource.data.games >= 0))
@@ -39,6 +46,22 @@ service cloud.firestore {
 
       match /games/{gameId} {
         allow read, write: if signedIn() && me() == uid;
+      }
+
+      match /blocks/{other} {
+        allow read, delete: if signedIn() && me() == uid;
+        allow create: if signedIn() && me() == uid && other != uid
+          && request.resource.data.keys().hasOnly(['displayName', 'createdAt'])
+          && str(request.resource.data.displayName, 0, 40);
+      }
+
+      match /blockedBy/{blocker} {
+        allow read: if signedIn() && me() == uid;
+        // only the blocker writes, and only alongside their own block record
+        allow create: if signedIn() && me() == blocker && blocker != uid
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && existsAfter(blockPath(blocker, uid));
+        allow delete: if signedIn() && me() == blocker;
       }
     }
 
@@ -79,7 +102,7 @@ service cloud.firestore {
             // the creator's own owner membership, written in the same batch as the new group
             (request.resource.data.role == 'owner' && me() == uid && !exists(groupPath(gid))
               && getAfter(groupPath(gid)).data.ownerId == me())
-            || (request.resource.data.role == 'member' && countMovedBy(gid, 1, uid) && (
+            || (request.resource.data.role == 'member' && countMovedBy(gid, 1, uid) && !exists(banPath(gid, uid)) && (
             // join a public group yourself
             (me() == uid && get(groupPath(gid)).data.joinMode == 'public')
             // admin approves a pending request (request removed in the same batch)
@@ -108,9 +131,44 @@ service cloud.firestore {
           && request.resource.data.keys().hasOnly(['displayName', 'createdAt'])
           && str(request.resource.data.displayName, 1, 40)
           && get(groupPath(gid)).data.joinMode == 'private'
-          && !exists(memberPath(gid, uid));
+          && !exists(memberPath(gid, uid))
+          && !exists(banPath(gid, uid));
         allow delete: if signedIn() && (me() == uid || isAdmin(gid) || (isOwner(gid) && !existsAfter(groupPath(gid))));
       }
+
+      match /bans/{uid} {
+        allow read: if signedIn() && (me() == uid || isAdmin(gid));
+        // an owner (anyone) or admin (plain members only) bans a current member as they remove them
+        allow create: if signedIn() && uid != me()
+          && request.resource.data.keys().hasOnly(['displayName', 'by', 'createdAt'])
+          && str(request.resource.data.displayName, 0, 40)
+          && request.resource.data.by == me()
+          && exists(memberPath(gid, uid))
+          && get(memberPath(gid, uid)).data.role != 'owner'
+          && (isOwner(gid) || (isAdmin(gid) && get(memberPath(gid, uid)).data.role == 'member'));
+        // the owner lifts a ban (also when the whole group is deleted)
+        allow delete: if isOwner(gid);
+      }
+    }
+
+    // Reports of objectionable content/users. Signed-in users may file one; nobody can read, edit or
+    // delete them from the client. The developer reviews them in the Firebase console (Firestore > reports).
+    match /reports/{rid} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['reporterId', 'targetType', 'targetId', 'reason', 'status', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['reporterId', 'targetType', 'targetId', 'groupId', 'targetName', 'targetText', 'reason', 'details', 'status', 'createdAt'])
+        && request.resource.data.reporterId == me()
+        && request.resource.data.targetType in ['group', 'user']
+        && str(request.resource.data.targetId, 1, 128)
+        && request.resource.data.targetId != me()
+        && (!('groupId' in request.resource.data) || str(request.resource.data.groupId, 1, 128))
+        && (!('targetName' in request.resource.data) || str(request.resource.data.targetName, 0, 60))
+        && (!('targetText' in request.resource.data) || str(request.resource.data.targetText, 0, 300))
+        && request.resource.data.reason in ['offensive', 'spam', 'harassment', 'other']
+        && (!('details' in request.resource.data) || str(request.resource.data.details, 0, 500))
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if false;
     }
   }
 }

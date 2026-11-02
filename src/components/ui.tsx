@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react'
 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(' ')
@@ -32,8 +32,16 @@ export function Button({
   )
 }
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cx('rounded-3xl bg-panel/90 ring-1 ring-white/10', className)}>{children}</div>
+export function Card({
+  className,
+  children,
+  ...rest
+}: { className?: string; children: ReactNode } & Omit<HTMLAttributes<HTMLDivElement>, 'className' | 'children'>) {
+  return (
+    <div {...rest} className={cx('rounded-3xl bg-panel/90 ring-1 ring-white/10', className)}>
+      {children}
+    </div>
+  )
 }
 
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {

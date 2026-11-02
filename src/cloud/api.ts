@@ -23,6 +23,7 @@ import {
 } from 'firebase/auth'
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -41,6 +42,7 @@ import { firebaseConfig } from './config'
 import { isNativeApp } from '../platform/native'
 import type { GameRecord } from '../game/history'
 import { validRecord } from '../game/validate'
+import { TERMS_VERSION, buildReport, type BlockLists, type ReportReason, type ReportTargetType } from '../moderation'
 
 let app: FirebaseApp | null = null
 let auth: Auth
@@ -109,12 +111,18 @@ export function errorText(e: unknown): string {
   return map[code] ?? (e instanceof Error ? e.message.replace(/^Firebase: /, '') : 'Something went wrong.')
 }
 
-export async function signUp(email: string, password: string, displayName: string) {
+export async function signUp(email: string, password: string, displayName: string, acceptedTerms = false) {
+  // Terms of Use (no tolerance for objectionable content or abusive users) must be accepted to create an account.
+  if (!acceptedTerms) throw new Error('Please agree to the Terms of Use to create an account.')
   init()
   const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password)
   const name = displayName.trim().slice(0, 40) || email.split('@')[0].slice(0, 40)
   await updateProfile(user, { displayName: name })
-  await setDoc(doc(db, 'users', user.uid), { displayName: name, updatedAt: serverTimestamp() }, { merge: true })
+  await setDoc(
+    doc(db, 'users', user.uid),
+    { displayName: name, updatedAt: serverTimestamp(), termsAcceptedAt: serverTimestamp(), termsVersion: TERMS_VERSION },
+    { merge: true },
+  )
   sendEmailVerification(user).catch(() => {})
   emitCurrent()
   return toAccount(user)
@@ -159,11 +167,27 @@ export interface Profile {
   provisional?: boolean
   games?: number
   wins?: number
+  termsAcceptedAt?: unknown
+  termsVersion?: string
 }
 export async function getProfile(uid: string): Promise<Profile | null> {
   init()
   const s = await getDoc(doc(db, 'users', uid))
   return s.exists() ? (s.data() as Profile) : null
+}
+/** Record that the signed-in user agreed to the current Terms of Use (existing accounts, before they join or create groups). */
+export async function acceptTerms() {
+  const u = current()
+  await setDoc(
+    doc(db, 'users', u.uid),
+    {
+      displayName: (u.displayName || (u.email ?? 'Player').split('@')[0]).slice(0, 40),
+      updatedAt: serverTimestamp(),
+      termsAcceptedAt: serverTimestamp(),
+      termsVersion: TERMS_VERSION,
+    },
+    { merge: true },
+  )
 }
 /** Save the public profile. `rename` also changes the account's display name. */
 export async function saveProfile(p: Profile, rename = false) {
@@ -231,6 +255,7 @@ export interface JoinRequest {
 const groupRef = (gid: string) => doc(db, 'groups', gid)
 const memberRef = (gid: string, uid: string) => doc(db, 'groups', gid, 'members', uid)
 const requestRef = (gid: string, uid: string) => doc(db, 'groups', gid, 'requests', uid)
+const banRef = (gid: string, uid: string) => doc(db, 'groups', gid, 'bans', uid)
 const myName = () => {
   const u = current()
   return (u.displayName || (u.email ?? 'Player').split('@')[0]).slice(0, 40)
@@ -266,6 +291,8 @@ export interface GroupDetail {
   requests: JoinRequest[]
   myRole: Role | null
   myRequest: boolean
+  /** removed members who can't rejoin (owners/admins only) */
+  bans: Banned[]
 }
 
 export async function getGroup(gid: string, uid: string | null): Promise<GroupDetail | null> {
@@ -300,7 +327,9 @@ export async function getGroup(gid: string, uid: string | null): Promise<GroupDe
   } else if (uid && !myRole) {
     myRequest = (await getDoc(requestRef(gid, uid)).catch(() => null))?.exists() ?? false
   }
-  return { group, members, requests, myRole, myRequest }
+  const bans =
+    uid && (myRole === 'owner' || myRole === 'admin') ? await listBans(gid).catch(() => [] as Banned[]) : []
+  return { group, members, requests, myRole, myRequest, bans }
 }
 
 export async function joinGroup(gid: string) {
@@ -346,6 +375,28 @@ export async function removeMember(gid: string, uid: string) {
   b.update(groupRef(gid), { memberCount: increment(-1), lastMember: uid })
   await b.commit()
 }
+/** Owner/admin removes a member and stops them rejoining (until the owner allows them back). */
+export async function removeAndBan(gid: string, uid: string, displayName: string) {
+  const u = current()
+  const b = writeBatch(db)
+  b.delete(memberRef(gid, uid))
+  b.update(groupRef(gid), { memberCount: increment(-1), lastMember: uid })
+  b.set(banRef(gid, uid), { displayName: displayName.slice(0, 40), by: u.uid, createdAt: serverTimestamp() })
+  await b.commit()
+}
+export interface Banned {
+  uid: string
+  displayName: string
+}
+export async function listBans(gid: string): Promise<Banned[]> {
+  init()
+  const s = await getDocs(collection(db, 'groups', gid, 'bans'))
+  return s.docs.map((d) => ({ uid: d.id, displayName: String(d.data().displayName ?? 'Player') }))
+}
+export async function unban(gid: string, uid: string) {
+  current()
+  await deleteDoc(banRef(gid, uid))
+}
 export async function setRole(gid: string, uid: string, role: 'admin' | 'member') {
   current()
   const b = writeBatch(db)
@@ -364,14 +415,70 @@ export async function editGroup(gid: string, patch: { name: string; description:
 }
 export async function deleteGroup(gid: string) {
   current()
-  const [ms, rs] = await Promise.all([
+  const [ms, rs, bs] = await Promise.all([
     getDocs(collection(db, 'groups', gid, 'members')),
     getDocs(collection(db, 'groups', gid, 'requests')),
+    getDocs(collection(db, 'groups', gid, 'bans')),
   ])
   const b = writeBatch(db)
   ms.forEach((d) => b.delete(d.ref))
   rs.forEach((d) => b.delete(d.ref))
+  bs.forEach((d) => b.delete(d.ref))
   b.delete(groupRef(gid))
+  await b.commit()
+}
+
+// ------------------------------------------------------------------ reports & blocks
+export interface ReportTarget {
+  type: ReportTargetType
+  id: string
+  name?: string
+  text?: string
+  groupId?: string
+}
+/** File a report of a group (name/description) or a user (display name). Stored in `reports`; reviewed in the Firebase console. */
+export async function reportContent(t: ReportTarget, reason: ReportReason, details: string) {
+  const u = current()
+  const r = buildReport({
+    reporterId: u.uid,
+    targetType: t.type,
+    targetId: t.id,
+    reason,
+    groupId: t.groupId,
+    targetName: t.name,
+    targetText: t.text,
+    details,
+  })
+  await setDoc(doc(collection(db, 'reports')), { ...r, createdAt: serverTimestamp() })
+}
+
+export interface Block {
+  uid: string
+  displayName: string
+}
+/** Users I blocked (with the name they had when blocked) plus the uids that blocked me. */
+export async function getBlocks(): Promise<{ list: Block[]; lists: BlockLists }> {
+  const u = current()
+  const [mine, theirs] = await Promise.all([
+    getDocs(collection(db, 'users', u.uid, 'blocks')),
+    getDocs(collection(db, 'users', u.uid, 'blockedBy')),
+  ])
+  const list = mine.docs.map((d) => ({ uid: d.id, displayName: String(d.data().displayName ?? 'Player') }))
+  return { list, lists: { blocked: list.map((b) => b.uid), blockedBy: theirs.docs.map((d) => d.id) } }
+}
+export async function blockUser(uid: string, displayName: string) {
+  const u = current()
+  if (uid === u.uid) throw new Error('You can’t block yourself.')
+  const b = writeBatch(db)
+  b.set(doc(db, 'users', u.uid, 'blocks', uid), { displayName: displayName.slice(0, 40), createdAt: serverTimestamp() })
+  b.set(doc(db, 'users', uid, 'blockedBy', u.uid), { createdAt: serverTimestamp() })
+  await b.commit()
+}
+export async function unblockUser(uid: string) {
+  const u = current()
+  const b = writeBatch(db)
+  b.delete(doc(db, 'users', u.uid, 'blocks', uid))
+  b.delete(doc(db, 'users', uid, 'blockedBy', u.uid))
   await b.commit()
 }
 
@@ -398,6 +505,14 @@ export async function deleteAccount(currentPassword: string) {
     ])
     if (m?.exists()) await removeMember(g.id, uid)
     if (r?.exists()) await cancelRequest(g.id)
+  }
+  // my blocks (and the mirrored blockedBy markers on the other users)
+  const myBlocks = await getDocs(collection(db, 'users', uid, 'blocks'))
+  for (const bl of myBlocks.docs) {
+    const b = writeBatch(db)
+    b.delete(bl.ref)
+    b.delete(doc(db, 'users', bl.id, 'blockedBy', uid))
+    await b.commit()
   }
   // synced games, then the profile
   const games = await getDocs(collection(db, 'users', uid, 'games'))

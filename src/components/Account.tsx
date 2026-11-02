@@ -1,5 +1,5 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
-import type { Account as Acc, Profile } from '../cloud/api'
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import type { Account as Acc, Block, Profile } from '../cloud/api'
 import type { CloudApi } from '../cloud/useCloud'
 import { isNativeApp } from '../platform/native'
 import { HANDICAP, computeStats, winPct, type GameRecord, type HandicapInfo } from '../game/history'
@@ -68,12 +68,13 @@ function SignIn({ api, setAccount }: { api: CloudApi; setAccount: (a: Acc | null
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [agree, setAgree] = useState(false)
   const { busy, run, view } = useAction()
   const submit = (e: FormEvent) => {
     e.preventDefault()
     run(async () => {
       if (mode === 'in') setAccount(await api.signIn(email, password))
-      else if (mode === 'up') setAccount(await api.signUp(email, password, name))
+      else if (mode === 'up') setAccount(await api.signUp(email, password, name, agree))
       else {
         await api.resetPassword(email)
         return 'If that email has an account, a reset link is on its way. Check your inbox (and spam).'
@@ -121,8 +122,27 @@ function SignIn({ api, setAccount }: { api: CloudApi; setAccount: (a: Acc | null
               required
             />
           )}
+          {mode === 'up' && (
+            <label className="flex items-start gap-3 text-sm text-cream/80">
+              <input
+                type="checkbox"
+                className="mt-1 h-5 w-5 shrink-0 accent-[#d4a640]"
+                aria-label="I agree to the Terms of Use"
+                checked={agree}
+                onChange={(e) => setAgree(e.target.checked)}
+              />
+              <span>
+                I agree to the{' '}
+                <a className="text-gold underline" href="./terms.html" target={isNativeApp() ? undefined : '_blank'} rel="noopener">
+                  Terms of Use
+                </a>
+                . There is no tolerance for objectionable content or abusive users: offenders are removed and reported
+                content is reviewed within 24 hours.
+              </span>
+            </label>
+          )}
           {view}
-          <Button type="submit" variant="primary" className="min-h-14 text-lg" disabled={busy}>
+          <Button type="submit" variant="primary" className="min-h-14 text-lg" disabled={busy || (mode === 'up' && !agree)}>
             {busy ? 'Please wait…' : mode === 'in' ? 'Sign in' : mode === 'up' ? 'Create account' : 'Send reset link'}
           </Button>
         </form>
@@ -326,6 +346,8 @@ function ProfileView({
         </Card>
       </section>
 
+      <BlockedUsers api={api} />
+
       <Button variant="danger" onClick={() => api.signOut().then(() => setAccount(null))}>
         Sign out
       </Button>
@@ -338,13 +360,65 @@ function ProfileView({
   )
 }
 
+function BlockedUsers({ api }: { api: CloudApi }) {
+  const [list, setList] = useState<Block[] | null>(null)
+  const act = useAction()
+  const load = useCallback(() => {
+    api
+      .getBlocks()
+      .then((b) => setList(b.list))
+      .catch(() => setList([]))
+  }, [api])
+  useEffect(load, [load])
+  return (
+    <section className="flex flex-col gap-2">
+      <SectionTitle>Blocked users</SectionTitle>
+      <Card className="flex flex-col gap-2 p-4">
+        {list === null ? (
+          <p className="text-sm text-cream/50">Loading…</p>
+        ) : list.length === 0 ? (
+          <p className="text-sm text-cream/60">
+            You haven’t blocked anyone. To block someone, open a group and tap ⋯ next to their name.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {list.map((b) => (
+              <li key={b.uid} className="flex items-center gap-3">
+                <Avatar name={b.displayName} size="sm" />
+                <span className="min-w-0 flex-1 truncate font-semibold">{b.displayName}</span>
+                <Button
+                  className="min-h-10 text-sm"
+                  disabled={act.busy}
+                  onClick={() =>
+                    act.run(async () => {
+                      await api.unblockUser(b.uid)
+                      load()
+                      return `Unblocked ${b.displayName}.`
+                    }, api)
+                  }
+                >
+                  Unblock
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {act.view}
+      </Card>
+    </section>
+  )
+}
+
 export function LegalLinks() {
   // In the native app, open in place (the pages link back); on the web, a new tab.
   const blank = isNativeApp() ? undefined : '_blank'
   return (
-    <p className="flex justify-center gap-4 text-xs text-cream/45">
+    <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-cream/45">
       <a className="underline" href="./privacy.html" target={blank} rel="noopener">
         Privacy policy
+      </a>
+      <a className="underline" href="./terms.html" target={blank} rel="noopener">
+        Terms of Use
       </a>
       <a className="underline" href="./support.html" target={blank} rel="noopener">
         Support

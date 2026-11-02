@@ -244,7 +244,21 @@ function Screens({ onAskReview }: { onAskReview: () => void }) {
       />
     )
   if (screen === 'groups')
-    return <Groups header={header} nav={nav} api={api} account={account} onSignIn={() => setScreen('account')} />
+    return (
+      <Groups
+        header={header}
+        nav={nav}
+        api={api}
+        account={account}
+        onSignIn={() => setScreen('account')}
+        needsTerms={!!account && !!profile && !profile.termsAcceptedAt}
+        onAcceptTerms={async () => {
+          if (!api) return
+          await api.acceptTerms()
+          setProfile((p) => (p ? { ...p, termsAcceptedAt: true } : p))
+        }}
+      />
+    )
 
   if (screen === 'players')
     return (

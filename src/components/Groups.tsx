@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import type { Account, Group, GroupDetail, JoinMode } from '../cloud/api'
+import type { Account, Group, GroupDetail, JoinMode, ReportTarget } from '../cloud/api'
 import type { CloudApi } from '../cloud/useCloud'
 import { HANDICAP } from '../game/history'
+import { canRemoveMember, hiddenSet, noBlocks, visible, visibleGroups } from '../moderation'
+import { ReportForm } from './Moderation'
 import { Avatar, Button, Card, HandicapTag, SectionTitle, cx } from './ui'
 
 interface Props {
@@ -10,13 +12,67 @@ interface Props {
   api: CloudApi | null
   account: Account | null
   onSignIn: () => void
+  /** signed in but hasn't agreed to the Terms of Use yet (accounts made before the terms existed) */
+  needsTerms?: boolean
+  onAcceptTerms?: () => Promise<void>
+}
+
+/** Shown to existing accounts until they agree to the Terms of Use; blocks creating/joining groups. */
+function TermsGate({ onAccept }: { onAccept: () => Promise<void> }) {
+  const [agree, setAgree] = useState(false)
+  const [busy, setBusy] = useState(false)
+  return (
+    <Card className="flex flex-col gap-3 p-4 ring-1 ring-gold/40">
+      <p className="text-sm text-cream/75">
+        Before you create or join groups, please agree to our Terms of Use. There is no tolerance for objectionable
+        content or abusive users.
+      </p>
+      <label className="flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1 h-5 w-5 accent-[#d4a640]"
+          checked={agree}
+          onChange={(e) => setAgree(e.target.checked)}
+        />
+        <span>
+          I agree to the{' '}
+          <a className="text-gold underline" href="./terms.html" target="_blank" rel="noopener">
+            Terms of Use
+          </a>
+        </span>
+      </label>
+      <Button
+        variant="primary"
+        disabled={!agree || busy}
+        onClick={() => {
+          setBusy(true)
+          onAccept().finally(() => setBusy(false))
+        }}
+      >
+        Agree and continue
+      </Button>
+    </Card>
+  )
 }
 
 const input =
   'min-h-12 w-full rounded-xl bg-white/5 px-3 text-lg outline-none ring-1 ring-white/10 placeholder:text-cream/40 focus:ring-gold'
 
-export default function Groups({ header, nav, api, account, onSignIn }: Props) {
+export default function Groups({ header, nav, api, account, onSignIn, needsTerms, onAcceptTerms }: Props) {
   const [open, setOpen] = useState<string | null>(null)
+  const [lists, setLists] = useState(noBlocks)
+  const uid = account?.uid
+  const loadBlocks = useCallback(() => {
+    if (!api || !uid) return setLists(noBlocks)
+    api
+      .getBlocks()
+      .then((b) => setLists(b.lists))
+      .catch(() => setLists(noBlocks))
+  }, [api, uid])
+  useEffect(loadBlocks, [loadBlocks])
+  const hidden = hiddenSet(lists)
+  const gate = needsTerms && onAcceptTerms ? <TermsGate onAccept={onAcceptTerms} /> : null
+  const canPost = !needsTerms
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col md:max-w-4xl md:px-8 gap-5 px-4 pb-16 pt-6">
       {header}
@@ -24,9 +80,31 @@ export default function Groups({ header, nav, api, account, onSignIn }: Props) {
       {!api ? (
         <Card className="p-4 text-sm text-cream/60">Loading…</Card>
       ) : open ? (
-        <GroupPage api={api} account={account} gid={open} onBack={() => setOpen(null)} onSignIn={onSignIn} />
+        <>
+          {gate}
+          <GroupPage
+            api={api}
+            account={account}
+            gid={open}
+            hidden={hidden}
+            canPost={canPost}
+            onBlocksChanged={loadBlocks}
+            onBack={() => setOpen(null)}
+            onSignIn={onSignIn}
+          />
+        </>
       ) : (
-        <GroupList api={api} account={account} onOpen={setOpen} onSignIn={onSignIn} />
+        <>
+          {gate}
+          <GroupList
+            api={api}
+            account={account}
+            hidden={hidden}
+            canPost={canPost}
+            onOpen={setOpen}
+            onSignIn={onSignIn}
+          />
+        </>
       )}
     </div>
   )
@@ -48,15 +126,20 @@ function ModeBadge({ mode }: { mode: JoinMode }) {
 function GroupList({
   api,
   account,
+  hidden,
+  canPost,
   onOpen,
   onSignIn,
 }: {
   api: CloudApi
   account: Account | null
+  hidden: Set<string>
+  canPost: boolean
   onOpen: (id: string) => void
   onSignIn: () => void
 }) {
-  const [groups, setGroups] = useState<Group[] | null>(null)
+  const [allGroups, setGroups] = useState<Group[] | null>(null)
+  const groups = allGroups && visibleGroups(allGroups, hidden)
   const [err, setErr] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -90,7 +173,7 @@ function GroupList({
       <div className="flex items-end justify-between">
         <SectionTitle>Groups</SectionTitle>
         {account ? (
-          <Button className="mb-1 min-h-10 text-sm" onClick={() => setCreating(!creating)}>
+          <Button className="mb-1 min-h-10 text-sm" disabled={!canPost} onClick={() => setCreating(!creating)}>
             {creating ? 'Cancel' : '+ New group'}
           </Button>
         ) : (
@@ -183,12 +266,18 @@ function GroupPage({
   api,
   account,
   gid,
+  hidden,
+  canPost,
+  onBlocksChanged,
   onBack,
   onSignIn,
 }: {
   api: CloudApi
   account: Account | null
   gid: string
+  hidden: Set<string>
+  canPost: boolean
+  onBlocksChanged: () => void
   onBack: () => void
   onSignIn: () => void
 }) {
@@ -197,6 +286,9 @@ function GroupPage({
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(false)
   const [confirm, setConfirm] = useState<string | null>(null)
+  /** what the open row menu is doing: the menu itself, confirming a removal or confirming a block */
+  const [step, setStep] = useState<'menu' | 'remove' | 'block'>('menu')
+  const [reporting, setReporting] = useState<{ target: ReportTarget; label: string } | null>(null)
   const [form, setForm] = useState({ name: '', description: '', joinMode: 'public' as JoinMode })
   const uid = account?.uid ?? null
   const load = useCallback(() => {
@@ -212,6 +304,7 @@ function GroupPage({
     try {
       await fn()
       setConfirm(null)
+      setStep('menu')
       after?.()
       load()
     } catch (e) {
@@ -231,12 +324,39 @@ function GroupPage({
         </Button>
       </Card>
     )
-  const { group, members, requests, myRole, myRequest } = d
+  const { group, myRole, myRequest, bans } = d
   const isOwner = myRole === 'owner'
   const isAdmin = isOwner || myRole === 'admin'
+  // people I blocked, and people who blocked me, are hidden from members, rankings and requests
+  const members = visible(d.members, hidden, (m) => m.uid)
+  const requests = visible(d.requests, hidden, (r) => r.uid)
+  const hiddenCount = d.members.length - members.length
+  const ownerHidden = hidden.has(group.ownerId)
+  const report = (target: ReportTarget, label: string) => {
+    if (!account) return onSignIn()
+    setReporting({ target, label })
+    setTimeout(() => document.getElementById('report-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50)
+  }
+  const blockUser = (u: string, name: string) => act(() => api.blockUser(u, name), onBlocksChanged)
   const ranked = [...members].sort(
     (a, b) => (a.handicap ?? HANDICAP.start) - (b.handicap ?? HANDICAP.start) || (b.wins ?? 0) - (a.wins ?? 0),
   )
+
+  if (ownerHidden)
+    return (
+      <Card className="flex flex-col gap-3 p-4">
+        <p className="text-sm text-cream/60">This group is hidden because it belongs to a user you blocked (or who blocked you).</p>
+        <div className="flex gap-2">
+          <Button onClick={onBack}>← All groups</Button>
+          {myRole && !isOwner && (
+            <Button variant="danger" disabled={busy} onClick={() => act(() => api.removeMember(gid, uid!), onBack)}>
+              Leave group
+            </Button>
+          )}
+        </div>
+        {err && <p className="text-sm text-rose-300">{err}</p>}
+      </Card>
+    )
 
   return (
     <section className="flex flex-col gap-4">
@@ -260,12 +380,12 @@ function GroupPage({
             </Button>
           )}
           {account && !myRole && group.joinMode === 'public' && (
-            <Button variant="primary" disabled={busy} onClick={() => act(() => api.joinGroup(gid))}>
+            <Button variant="primary" disabled={busy || !canPost} onClick={() => act(() => api.joinGroup(gid))}>
               Join group
             </Button>
           )}
           {account && !myRole && group.joinMode === 'private' && !myRequest && (
-            <Button variant="primary" disabled={busy} onClick={() => act(() => api.requestJoin(gid))}>
+            <Button variant="primary" disabled={busy || !canPost} onClick={() => act(() => api.requestJoin(gid))}>
               Request to join
             </Button>
           )}
@@ -282,6 +402,17 @@ function GroupPage({
               Leave group
             </Button>
           )}
+          {!isOwner && (
+            <Button
+              variant="ghost"
+              aria-label="Report group"
+              onClick={() =>
+                report({ type: 'group', id: gid, name: group.name, text: group.description }, `group “${group.name}”`)
+              }
+            >
+              ⚑ Report group
+            </Button>
+          )}
           {isOwner && (
             <Button
               onClick={() => {
@@ -295,6 +426,12 @@ function GroupPage({
         </div>
         {err && <p className="mt-2 text-sm text-rose-300">{err}</p>}
       </Card>
+
+      {reporting && account && (
+        <div id="report-form">
+          <ReportForm api={api} target={reporting.target} label={reporting.label} onClose={() => setReporting(null)} />
+        </div>
+      )}
 
       {isOwner && editing && (
         <Card className="anim-rise flex flex-col gap-3 p-4">
@@ -325,6 +462,26 @@ function GroupPage({
           >
             Save changes
           </Button>
+          {bans.length > 0 && (
+            <div>
+              <SectionTitle>Removed members ({bans.length})</SectionTitle>
+              <ul className="flex flex-col gap-2">
+                {bans.map((b) => (
+                  <li key={b.uid} className="flex items-center gap-3 rounded-2xl bg-white/5 p-2 ring-1 ring-white/10">
+                    <span className="min-w-0 flex-1 truncate text-sm">{b.displayName}</span>
+                    <Button
+                      className="min-h-10 text-sm"
+                      disabled={busy}
+                      onClick={() => act(() => api.unban(gid, b.uid))}
+                    >
+                      Allow back
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 px-1 text-[11px] text-cream/40">Removed members can’t rejoin or request to join until you allow them back.</p>
+            </div>
+          )}
           {confirm === 'delete' ? (
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => setConfirm(null)}>Keep</Button>
@@ -345,7 +502,7 @@ function GroupPage({
           <SectionTitle>Join requests ({requests.length})</SectionTitle>
           <ul className="flex flex-col gap-2 md:grid md:grid-cols-2">
             {requests.map((r) => (
-              <li key={r.uid} className="flex items-center gap-3 rounded-2xl bg-[#1d1913] p-3 ring-1 ring-gold/40">
+              <li key={r.uid} className="flex flex-wrap items-center gap-3 rounded-2xl bg-[#1d1913] p-3 ring-1 ring-gold/40">
                 <Avatar name={r.displayName} size="sm" />
                 <span className="min-w-0 flex-1 truncate font-semibold">{r.displayName}</span>
                 <Button
@@ -363,6 +520,28 @@ function GroupPage({
                 >
                   Decline
                 </Button>
+                <span className="flex basis-full justify-end gap-4 text-xs text-cream/55">
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() =>
+                      report(
+                        { type: 'user', id: r.uid, name: r.displayName, groupId: gid },
+                        `${r.displayName}’s display name`,
+                      )
+                    }
+                  >
+                    Report
+                  </button>
+                  <button
+                    type="button"
+                    className="underline"
+                    disabled={busy}
+                    onClick={() => blockUser(r.uid, r.displayName)}
+                  >
+                    Block
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
@@ -373,8 +552,7 @@ function GroupPage({
         <SectionTitle>Leaderboard · by handicap</SectionTitle>
         <ol className="flex flex-col gap-2 md:grid md:grid-cols-2">
           {ranked.map((m, k) => {
-            const canRemove =
-              uid !== m.uid && m.role !== 'owner' && (isOwner || (myRole === 'admin' && m.role === 'member'))
+            const canRemove = canRemoveMember(uid, myRole, m)
             return (
               <li
                 key={m.uid}
@@ -412,20 +590,63 @@ function GroupPage({
                       )}
                     </span>
                   </span>
-                  {(canRemove || (isOwner && m.role !== 'owner')) && (
+                  {m.uid !== uid && (
                     <button
                       type="button"
                       aria-label={`Manage ${m.displayName}`}
                       className="h-10 w-10 rounded-xl text-cream/50 hover:bg-white/5"
-                      onClick={() => setConfirm(confirm === m.uid ? null : m.uid)}
+                      onClick={() => {
+                        setConfirm(confirm === m.uid ? null : m.uid)
+                        setStep('menu')
+                      }}
                     >
                       ⋯
                     </button>
                   )}
                 </div>
-                {confirm === m.uid && (
+                {confirm === m.uid && step === 'remove' && (
+                  <div className="anim-rise mt-2 flex flex-col gap-2">
+                    <p className="text-sm text-cream/70">
+                      Remove {m.displayName} from the group? They won’t be able to rejoin unless you allow them back.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button className="min-h-10 text-sm" onClick={() => setStep('menu')}>
+                        Cancel
+                      </Button>
+                      <Button
+                        className="min-h-10 text-sm"
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => act(() => api.removeAndBan(gid, m.uid, m.displayName))}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {confirm === m.uid && step === 'block' && (
+                  <div className="anim-rise mt-2 flex flex-col gap-2">
+                    <p className="text-sm text-cream/70">
+                      Block {m.displayName}? You won’t see each other’s names or groups. You can unblock in Profile.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button className="min-h-10 text-sm" onClick={() => setStep('menu')}>
+                        Cancel
+                      </Button>
+                      <Button
+                        className="min-h-10 text-sm"
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => blockUser(m.uid, m.displayName)}
+                      >
+                        Block
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {confirm === m.uid && step === 'menu' && (
                   <div className="anim-rise mt-2 grid grid-cols-2 gap-2">
-                    {isOwner && (
+                    {isOwner && m.role !== 'owner' && (
                       <Button
                         className="min-h-10 text-sm"
                         disabled={busy}
@@ -439,17 +660,34 @@ function GroupPage({
                         className="min-h-10 text-sm"
                         variant="danger"
                         disabled={busy}
-                        onClick={() => act(() => api.removeMember(gid, m.uid))}
+                        onClick={() => setStep('remove')}
                       >
                         Remove from group
                       </Button>
                     )}
+                    <Button
+                      className="min-h-10 text-sm"
+                      onClick={() => {
+                        setConfirm(null)
+                        report({ type: 'user', id: m.uid, name: m.displayName, groupId: gid }, `${m.displayName}’s display name`)
+                      }}
+                    >
+                      Report
+                    </Button>
+                    <Button className="min-h-10 text-sm" variant="danger" onClick={() => setStep('block')}>
+                      Block
+                    </Button>
                   </div>
                 )}
               </li>
             )
           })}
         </ol>
+        {hiddenCount > 0 && (
+          <p className="mt-2 px-1 text-[11px] text-cream/40">
+            {hiddenCount} member{hiddenCount === 1 ? '' : 's'} hidden (blocked). Manage blocked users in Profile.
+          </p>
+        )}
         <p className="mt-2 px-1 text-[11px] text-cream/40">
           Handicaps come from each member’s own synced games (link your player on the Account page).
         </p>
